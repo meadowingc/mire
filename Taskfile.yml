@@ -1,0 +1,38 @@
+# https://taskfile.dev
+
+version: '3'
+
+tasks:
+  default:
+    - task --list-all
+
+  lint: 
+    - go run github.com/nishanths/exhaustive/cmd/exhaustive@latest ./...
+    - go run honnef.co/go/tools/cmd/staticcheck@latest ./...
+    - go vet ./...
+
+  release:
+    deps: [tidy, lint, test, fmt]
+    cmds:
+      - go build -tags="release"
+
+  tidy:
+    - go mod tidy -v
+
+  update-deps:
+    cmds:
+      - go get -u
+      - go clean -modcache
+      - task tidy
+
+  test:
+    - go test -v ./...
+
+  run:
+    - go run .
+
+  dev:
+    - air -c .air.toml
+
+  fmt:
+    - go fmt ./...
