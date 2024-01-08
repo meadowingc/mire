@@ -239,10 +239,7 @@ func (s *Site) username(r *http.Request) string {
 }
 
 func (s *Site) loggedIn(r *http.Request) bool {
-	if s.username(r) == "" {
-		return false
-	}
-	return true
+	return s.username(r) != ""
 }
 
 // login compares the sqlite password field against the user supplied password and

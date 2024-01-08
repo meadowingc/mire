@@ -3,12 +3,17 @@
 <h2>
 	<a href="/{{ .Username }}">Vore</a>
 </h2>
-	<a href="/discover">discover</a>
 	{{ if .LoggedIn }}
 	<a href="/settings">settings</a>
 	<a href="/logout">logout</a>
 	{{ else }}
 	<a href="/login">login</a>
 	{{ end }}
+
+	<a href="/discover">discover</a>
+
+	<a href="/global-feed">global</a>
+
+	<a href="/about">about</a>
 </nav>
 {{ end }}
