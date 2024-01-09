@@ -61,6 +61,17 @@ func (s *Site) indexHandler(w http.ResponseWriter, r *http.Request) {
 	s.renderPage(w, r, "index", nil)
 }
 
+func (s *Site) aboutHandler(w http.ResponseWriter, r *http.Request) {
+	s.renderPage(w, r, "about", nil)
+}
+
+func (s *Site) globalHandler(w http.ResponseWriter, r *http.Request) {
+	items := s.reaper.SortFeedItemsByDate(s.reaper.GetAllFeeds())
+	items = items[:50]
+
+	s.renderPage(w, r, "global-feed", items)
+}
+
 func (s *Site) discoverHandler(w http.ResponseWriter, r *http.Request) {
 	s.renderPage(w, r, "discover", nil)
 }
