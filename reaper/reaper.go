@@ -13,7 +13,7 @@ type PostSaveRequest struct {
 	FeedURL string
 	Title   string
 	Link    string
-	Date    string
+	Date    time.Time
 }
 
 type Reaper struct {
@@ -118,7 +118,7 @@ func (r *Reaper) refreshAllFeeds() {
 							FeedURL: f.UpdateURL,
 							Title:   newItem.Title,
 							Link:    newItem.Link,
-							Date:    newItem.Date.String(),
+							Date:    newItem.Date,
 						}
 					}
 				}

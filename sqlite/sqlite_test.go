@@ -3,6 +3,7 @@ package sqlite
 import (
 	"os"
 	"testing"
+	"time"
 )
 
 func createNewTestDB() *DB {
@@ -19,7 +20,7 @@ func TestPostsOps(t *testing.T) {
 	testPost := &Post{
 		Title:             "Test Post",
 		URL:               "https://example.com",
-		PublishedDatetime: "2023-12-11T01:48:21.355062+00:00",
+		PublishedDatetime: time.Now(),
 	}
 
 	const testFeedUrl = "http://example-feed.com"
@@ -27,7 +28,7 @@ func TestPostsOps(t *testing.T) {
 
 	// create posts
 	db.SavePostStruct(testFeedUrl, testPost)
-	db.SavePost(testFeedUrl, "Test Post 2", "https://example.com/2", "2023-12-12T01:48:21.355062+00:00")
+	db.SavePost(testFeedUrl, "Test Post 2", "https://example.com/2", time.Now())
 
 	latest := db.GetLatestPosts(10)
 	if len(latest) != 2 {
@@ -58,7 +59,7 @@ func TestReadStatus(t *testing.T) {
 	testPost := &Post{
 		Title:             "Test Post",
 		URL:               "https://example.com",
-		PublishedDatetime: "2023-12-11T01:48:21.355062+00:00",
+		PublishedDatetime: time.Now(),
 	}
 
 	db.SavePostStruct(testFeedUrl, testPost)
