@@ -9,7 +9,7 @@ WIP
 
 {{ range .Data }}
 {{ .Title }}
-{{ .PublishedDatetime | timeSinceStr }}
+{{ .PublishedDatetime | timeSince }}
 {{ . }}
 {{ end }}
 

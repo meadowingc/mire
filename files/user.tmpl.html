@@ -19,7 +19,7 @@ you don't seem to have any feeds yet.
 {{ range .Data.Items }}
 	<li>
 	<a href="{{ .Link }}">
-		{{ .Title }}
+		{{ .Title }} 
 	</a>
 	<br>
 	<span class=puny title="{{ .Date }}">published {{ .Date | timeSince }} via <a href="//{{ .Link | printDomain }}">{{ .Link | printDomain }}</a></span>

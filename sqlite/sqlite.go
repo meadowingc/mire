@@ -7,7 +7,9 @@ import (
 	"io/fs"
 	"log"
 	"strings"
+	"time"
 
+	"git.j3s.sh/vore/rss"
 	_ "github.com/glebarez/go-sqlite"
 )
 
@@ -21,7 +23,7 @@ type DB struct {
 type Post struct {
 	Title             string
 	URL               string
-	PublishedDatetime string
+	PublishedDatetime time.Time
 }
 
 // New opens a sqlite database, populates it with tables, and
@@ -261,7 +263,7 @@ func (db *DB) SavePostStruct(feedUrl string, post *Post) {
 	db.SavePost(feedUrl, post.Title, post.URL, post.PublishedDatetime)
 }
 
-func (db *DB) SavePost(feedUrl string, title string, url string, publishedDatetime string) {
+func (db *DB) SavePost(feedUrl string, title string, url string, publishedDatetime time.Time) {
 	feedId := db.GetFeedID(feedUrl)
 
 	_, err := db.sql.Exec("INSERT INTO post (feed_id, title, url, published_at) VALUES (?, ?, ?, ?) ON CONFLICT(url) DO NOTHING",
@@ -320,7 +322,7 @@ func (db *DB) GetPostsForFeed(feedUrl string) []*Post {
 	return posts
 }
 
-func (db *DB) GetPostsForUser(username string) []*Post {
+func (db *DB) GetPostsForUser(username string) []*rss.Item {
 	uid := db.GetUserID(username)
 
 	rows, err := db.sql.Query(`
@@ -333,17 +335,24 @@ func (db *DB) GetPostsForUser(username string) []*Post {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer rows.Close()
 
-	var posts []*Post
+	var posts []*rss.Item
 	for rows.Next() {
-		var p Post
-		err = rows.Scan(&p.Title, &p.URL, &p.PublishedDatetime)
+		var p rss.Item
+		err = rows.Scan(&p.Title, &p.Link, &p.Date)
 		if err != nil {
 			log.Fatal(err)
 		}
+
 		posts = append(posts, &p)
 	}
+
+	rows.Close()
+
+	for _, p := range posts {
+		p.Read = db.GetReadStatus(username, p.Link)
+	}
+
 	return posts
 }
 
