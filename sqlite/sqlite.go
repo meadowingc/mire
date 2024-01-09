@@ -26,6 +26,8 @@ type Post struct {
 	PublishedDatetime time.Time
 }
 
+var mutex = make(chan struct{}, 1)
+
 // New opens a sqlite database, populates it with tables, and
 // returns a ready-to-use *sqlite.DB object which is used for
 // abstracting database queries.
@@ -78,24 +80,44 @@ func New(path string) *DB {
 		}
 	}
 
+	// open up mutex
+	mutex <- struct{}{}
+
 	return &DB{sql: db}
+}
+
+func lock() {
+	<-mutex
+}
+
+func unlock() {
+	mutex <- struct{}{}
 }
 
 func (db *DB) GetUsernameBySessionToken(token string) string {
 	var username string
+
+	lock()
 	err := db.sql.QueryRow("SELECT username FROM user WHERE session_token=?", token).Scan(&username)
+	unlock()
+
 	if err == sql.ErrNoRows {
 		return ""
 	}
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	return username
 }
 
 func (db *DB) GetPassword(username string) string {
 	var password string
+
+	lock()
 	err := db.sql.QueryRow("SELECT password FROM user WHERE username=?", username).Scan(&password)
+	unlock()
+
 	if err == sql.ErrNoRows {
 		return ""
 	}
@@ -107,7 +129,11 @@ func (db *DB) GetPassword(username string) string {
 
 func (db *DB) GetSessionToken(username string) (string, error) {
 	var result sql.NullString
+
+	lock()
 	err := db.sql.QueryRow("SELECT session_token FROM user WHERE username=?", username).Scan(&result)
+	unlock()
+
 	if err == sql.ErrNoRows {
 		return "", nil
 	}
@@ -115,12 +141,18 @@ func (db *DB) GetSessionToken(username string) (string, error) {
 }
 
 func (db *DB) SetSessionToken(username string, token string) error {
+	lock()
 	_, err := db.sql.Exec("UPDATE user SET session_token=? WHERE username=?", token, username)
+	unlock()
+
 	return err
 }
 
 func (db *DB) AddUser(username string, passwordHash string) error {
+	lock()
 	_, err := db.sql.Exec("INSERT INTO user (username, password) VALUES (?, ?)", username, passwordHash)
+	unlock()
+
 	return err
 }
 
@@ -128,9 +160,16 @@ func (db *DB) Subscribe(username string, feedURL string) {
 	uid := db.GetUserID(username)
 	fid := db.GetFeedID(feedURL)
 	var id int
+
+	lock()
 	err := db.sql.QueryRow("SELECT id FROM subscribe WHERE user_id=? AND feed_id=?", uid, fid).Scan(&id)
+	unlock()
+
 	if err == sql.ErrNoRows {
+		lock()
 		_, err := db.sql.Exec("INSERT INTO subscribe (user_id, feed_id) VALUES (?, ?)", uid, fid)
+		unlock()
+
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -142,7 +181,10 @@ func (db *DB) Subscribe(username string, feedURL string) {
 }
 
 func (db *DB) UnsubscribeAll(username string) {
+	lock()
 	_, err := db.sql.Exec("DELETE FROM subscribe WHERE user_id=?", db.GetUserID(username))
+	unlock()
+
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -150,7 +192,11 @@ func (db *DB) UnsubscribeAll(username string) {
 
 func (db *DB) UserExists(username string) bool {
 	var result string
+
+	lock()
 	err := db.sql.QueryRow("SELECT username FROM user WHERE username=?", username).Scan(&result)
+	unlock()
+
 	if err == sql.ErrNoRows {
 		return false
 	}
@@ -162,6 +208,9 @@ func (db *DB) UserExists(username string) bool {
 
 func (db *DB) GetAllFeedURLs() []string {
 	// TODO: BAD SELECT STATEMENT!! SORRY :( --wesley
+	lock()
+	defer unlock()
+
 	rows, err := db.sql.Query("SELECT url FROM feed")
 	if err != nil {
 		log.Fatal(err)
@@ -182,6 +231,9 @@ func (db *DB) GetAllFeedURLs() []string {
 
 func (db *DB) GetUserFeedURLs(username string) []string {
 	uid := db.GetUserID(username)
+
+	lock()
+	defer unlock()
 
 	// this query returns sql rows representing the list of
 	// rss feed urls the user is subscribed to
@@ -213,7 +265,11 @@ func (db *DB) GetUserFeedURLs(username string) []string {
 
 func (db *DB) GetUserID(username string) int {
 	var uid int
+
+	lock()
 	err := db.sql.QueryRow("SELECT id FROM user WHERE username=?", username).Scan(&uid)
+	unlock()
+
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -222,7 +278,11 @@ func (db *DB) GetUserID(username string) int {
 
 func (db *DB) GetFeedID(feedURL string) int {
 	var fid int
+
+	lock()
 	err := db.sql.QueryRow("SELECT id FROM feed WHERE url=?", feedURL).Scan(&fid)
+	unlock()
+
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -232,15 +292,21 @@ func (db *DB) GetFeedID(feedURL string) int {
 // WriteFeed writes an rss feed to the database for permanent storage
 // if the given feed already exists, WriteFeed does nothing.
 func (db *DB) WriteFeed(url string) {
+	lock()
 	_, err := db.sql.Exec(`INSERT INTO feed(url) VALUES(?)
 				ON CONFLICT(url) DO NOTHING`, url)
+	unlock()
+
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
 func (db *DB) SetFeedFetchError(url string, fetchErr string) error {
+	lock()
 	_, err := db.sql.Exec("UPDATE feed SET fetch_error=? WHERE url=?", fetchErr, url)
+	unlock()
+
 	if err != nil {
 		return err
 	}
@@ -249,7 +315,11 @@ func (db *DB) SetFeedFetchError(url string, fetchErr string) error {
 
 func (db *DB) GetFeedFetchError(url string) (string, error) {
 	var result sql.NullString
+
+	lock()
 	err := db.sql.QueryRow("SELECT fetch_error FROM feed WHERE url=?", url).Scan(&result)
+	unlock()
+
 	if err != nil {
 		return "", err
 	}
@@ -266,8 +336,11 @@ func (db *DB) SavePostStruct(feedUrl string, post *Post) {
 func (db *DB) SavePost(feedUrl string, title string, url string, publishedDatetime time.Time) {
 	feedId := db.GetFeedID(feedUrl)
 
+	lock()
 	_, err := db.sql.Exec("INSERT INTO post (feed_id, title, url, published_at) VALUES (?, ?, ?, ?) ON CONFLICT(url) DO NOTHING",
 		feedId, title, url, publishedDatetime)
+	unlock()
+
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -275,7 +348,11 @@ func (db *DB) SavePost(feedUrl string, title string, url string, publishedDateti
 
 func (db *DB) GetPostId(postUrl string) int {
 	var pid int
+
+	lock()
 	err := db.sql.QueryRow("SELECT id FROM post WHERE url=?", postUrl).Scan(&pid)
+	unlock()
+
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -283,6 +360,9 @@ func (db *DB) GetPostId(postUrl string) int {
 }
 
 func (db *DB) GetLatestPosts(limit int) []*Post {
+	lock()
+	defer unlock()
+
 	rows, err := db.sql.Query("SELECT title, url, published_at FROM post ORDER BY published_at DESC LIMIT ?", limit)
 	if err != nil {
 		log.Fatal(err)
@@ -303,6 +383,9 @@ func (db *DB) GetLatestPosts(limit int) []*Post {
 
 func (db *DB) GetPostsForFeed(feedUrl string) []*Post {
 	feedId := db.GetFeedID(feedUrl)
+
+	lock()
+	defer unlock()
 
 	rows, err := db.sql.Query("SELECT title, url, published_at FROM post WHERE feed_id=?", feedId)
 	if err != nil {
@@ -325,6 +408,7 @@ func (db *DB) GetPostsForFeed(feedUrl string) []*Post {
 func (db *DB) GetPostsForUser(username string) []*rss.Item {
 	uid := db.GetUserID(username)
 
+	lock()
 	rows, err := db.sql.Query(`
 		SELECT p.title, p.url, p.published_at
 		FROM post p
@@ -348,6 +432,7 @@ func (db *DB) GetPostsForUser(username string) []*rss.Item {
 	}
 
 	rows.Close()
+	unlock()
 
 	for _, p := range posts {
 		p.Read = db.GetReadStatus(username, p.Link)
@@ -361,6 +446,7 @@ func (db *DB) SetReadStatus(username string, postUrl string, read bool) {
 	postId := db.GetPostId(postUrl)
 
 	var exists bool
+	lock()
 	err := db.sql.QueryRow("SELECT 1 FROM post_read WHERE user_id=? AND post_id=?", userId, postId).Scan(&exists)
 	if err != nil && err != sql.ErrNoRows {
 		log.Fatal(err)
@@ -377,6 +463,7 @@ func (db *DB) SetReadStatus(username string, postUrl string, read bool) {
 			log.Fatal(err)
 		}
 	}
+	unlock()
 }
 
 func (db *DB) ToggleReadStatus(username string, postUrl string) {
@@ -384,7 +471,11 @@ func (db *DB) ToggleReadStatus(username string, postUrl string) {
 	postId := db.GetPostId(postUrl)
 
 	var read bool
+
+	lock()
 	err := db.sql.QueryRow("SELECT has_read FROM post_read WHERE user_id=? AND post_id=?", userId, postId).Scan(&read)
+	unlock()
+
 	if err != nil && err != sql.ErrNoRows {
 		log.Fatal(err)
 	}
@@ -397,7 +488,11 @@ func (db *DB) GetReadStatus(username string, postUrl string) bool {
 	postId := db.GetPostId(postUrl)
 
 	var read bool
+
+	lock()
 	err := db.sql.QueryRow("SELECT has_read FROM post_read WHERE user_id=? AND post_id=?", userId, postId).Scan(&read)
+	unlock()
+
 	if err != nil && err != sql.ErrNoRows {
 		log.Fatal(err)
 	}
