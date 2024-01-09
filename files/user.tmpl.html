@@ -15,18 +15,57 @@ you don't seem to have any feeds yet.
 {{ end }} <!-- if .LoggedIn -->
 {{ end }} <!-- if eq $length 0 -->
 
+
+{{ if .LoggedIn }}
+
 <ul>
 {{ range .Data.Items }}
-	<li>
-	<a href="{{ .Link }}">
-		{{ .Title }} 
-	</a>
-	<br>
-	<span class=puny title="{{ .Date }}">published {{ .Date | timeSince }} via <a href="//{{ .Link | printDomain }}">{{ .Link | printDomain }}</a></span>
-	</li>
+{{ $emoji := "" }}
+{{ $class := "" }}
+{{ if .Read }}
+    {{ $emoji = "📜" }}
+    {{ $class = "read" }}
+{{ else }}
+    {{ $emoji = "💌" }}
+    {{ $class = "unread" }}
+{{ end }}
+    <li>
+	<a href="javascript:void(0);" onclick="toggleReadStatus(event);">{{ $emoji }}</a>
+	<a href="{{ .Link }}" class="{{$class}}">
+        {{ .Title }} 
+    </a>
+    <br>
+    <span class=puny title="{{ .Date }}">published {{ .Date | timeSince }} via <a href="//{{ .Link | printDomain }}">{{ .Link | printDomain }}</a></span>
+    </li>
 {{ end }}
 </ul>
+{{ end }} <!-- if .LoggedIn -->
 </main>
+
+
+<script >
+function toggleReadStatus(event) {
+    const element = event.target; 
+	const titleElement = element.parentElement.querySelectorAll("a")[1];
+	const isRead = titleElement.className === "read";
+
+	const postUrl = encodeURIComponent(titleElement.href);
+	const newReadStatus = !isRead;
+
+	fetch(`/api/v1/set-post-status/${postUrl}`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/x-www-form-urlencoded"
+		},
+		body: `new_has_read=${encodeURIComponent(newReadStatus)}`
+	}).then(function(response) {
+		if (response.ok) {
+			titleElement.className = newReadStatus ? "read" : "unread";
+			element.innerText = newReadStatus ? "📜" : "💌";
+		}
+	});
+}
+</script>
 
 {{ template "tail" . }}
 {{ end }}
