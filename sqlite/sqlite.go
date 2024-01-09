@@ -231,8 +231,6 @@ func (db *DB) WriteFeed(url string) {
 	}
 }
 
-// WriteFeed writes an rss feed to the database for permanent storage
-// if the given feed already exists, WriteFeed does nothing.
 func (db *DB) SetFeedFetchError(url string, fetchErr string) error {
 	_, err := db.sql.Exec("UPDATE feed SET fetch_error=? WHERE url=?", fetchErr, url)
 	if err != nil {
@@ -241,8 +239,6 @@ func (db *DB) SetFeedFetchError(url string, fetchErr string) error {
 	return nil
 }
 
-// WriteFeed writes an rss feed to the database for permanent storage
-// if the given feed already exists, WriteFeed does nothing.
 func (db *DB) GetFeedFetchError(url string) (string, error) {
 	var result sql.NullString
 	err := db.sql.QueryRow("SELECT fetch_error FROM feed WHERE url=?", url).Scan(&result)

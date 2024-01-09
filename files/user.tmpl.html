@@ -2,15 +2,19 @@
 {{ template "head" . }}
 {{ template "nav" . }}
 
-{{ $length := len .Data.Items }} {{ if eq $length 0 }}
+<main>
+{{ $length := len .Data.Items }} 
+
+{{ if eq $length 0 }}
 {{ if .LoggedIn }}
 <p>
 you don't seem to have any feeds yet.
 
 <a href="/settings">add your first feed here!</a>
 </p>
-{{ end }}
-{{ end }}
+{{ end }} <!-- if .LoggedIn -->
+{{ end }} <!-- if eq $length 0 -->
+
 <ul>
 {{ range .Data.Items }}
 	<li>
@@ -22,6 +26,7 @@ you don't seem to have any feeds yet.
 	</li>
 {{ end }}
 </ul>
+</main>
 
 {{ template "tail" . }}
 {{ end }}
