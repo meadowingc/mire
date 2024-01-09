@@ -305,6 +305,28 @@ func (s *Site) register(username string, password string) error {
 	return nil
 }
 
+func (s *Site) apiSetPostReadStatus(w http.ResponseWriter, r *http.Request) {
+	if !s.loggedIn(r) {
+		s.renderErr(w, "", http.StatusUnauthorized)
+		return
+	}
+
+	postUrlEncoded := muxpatterns.PathValue(r, "postUrl")
+	postUrl, err := url.QueryUnescape(postUrlEncoded)
+	if err != nil {
+		s.renderErr(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	currentUsername := s.username(r)
+
+	hasRead := r.FormValue("new_has_read") == "true"
+
+	s.db.SetReadStatus(currentUsername, postUrl, hasRead)
+
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
 // renderPage renders the given page and passes data to the
 // template execution engine. it's normally the last thing a
 // handler should do tbh.

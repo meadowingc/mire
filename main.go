@@ -26,6 +26,9 @@ func main() {
 	mux.HandleFunc("POST /register", s.registerHandler)
 	mux.HandleFunc("GET /feeds/{url}", s.feedDetailsHandler)
 
+	// api functions
+	mux.HandleFunc("POST /api/v1/set-post-status/{postUrl}", s.apiSetPostReadStatus)
+
 	// left in-place for backwards compat
 	mux.HandleFunc("GET /feeds", s.settingsHandler)
 	mux.HandleFunc("POST /feeds/submit", s.settingsSubmitHandler)
