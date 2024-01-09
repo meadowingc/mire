@@ -12,8 +12,10 @@ func main() {
 	mux := muxpatterns.NewServeMux()
 
 	mux.HandleFunc("GET /{$}", s.indexHandler)
+	mux.HandleFunc("GET /about", s.aboutHandler)
 	mux.HandleFunc("GET /{username}", s.userHandler)
 	mux.HandleFunc("GET /static/{file}", s.staticHandler)
+	mux.HandleFunc("GET /global-feed", s.globalHandler)
 	mux.HandleFunc("GET /discover", s.discoverHandler)
 	mux.HandleFunc("GET /settings", s.settingsHandler)
 	mux.HandleFunc("POST /settings/submit", s.settingsSubmitHandler)
