@@ -1,14 +1,24 @@
 package reaper
 
 import (
+	"os"
 	"testing"
+	"time"
 
 	"git.j3s.sh/vore/rss"
 	"git.j3s.sh/vore/sqlite"
 )
 
+func createNewTestDB() *sqlite.DB {
+	// remove old db if it exists
+	os.Remove("reaper_go_test.db")
+
+	db := sqlite.New("reaper_go_test.db")
+	return db
+}
+
 func TestHasFeed(t *testing.T) {
-	db := sqlite.New("go_test.db")
+	db := createNewTestDB()
 	r := New(db)
 	f1 := rss.Feed{UpdateURL: "something"}
 	f2 := rss.Feed{UpdateURL: "strange"}
@@ -22,5 +32,23 @@ func TestHasFeed(t *testing.T) {
 	}
 	if r.HasFeed("strange") == false {
 		t.Fatal("reaper should have strange")
+	}
+}
+
+func TestNewPostsGetAddedToDatabase(t *testing.T) {
+	db := createNewTestDB()
+	db.WriteFeed("https://meadow.bearblog.dev/feed/")
+
+	r := New(db)
+
+	time.Sleep(1 * time.Second)
+
+	f1 := rss.Feed{UpdateURL: "https://meadow.bearblog.dev/feed/"}
+	r.addFeed(&f1)
+
+	time.Sleep(11 * time.Second) // 11 to account for the saver delay
+
+	if len(db.GetLatestPosts(10)) == 0 {
+		t.Fatal("expected 3 posts in db")
 	}
 }

@@ -9,21 +9,32 @@ import (
 	"git.j3s.sh/vore/sqlite"
 )
 
+type PostSaveRequest struct {
+	FeedURL string
+	Title   string
+	Link    string
+	Date    string
+}
+
 type Reaper struct {
 	// internal list of all rss feeds where the map
 	// key represents the url of the feed (which should be unique)
 	feeds map[string]*rss.Feed
+
+	saverChannel chan *PostSaveRequest
 
 	db *sqlite.DB
 }
 
 func New(db *sqlite.DB) *Reaper {
 	r := &Reaper{
-		feeds: make(map[string]*rss.Feed),
-		db:    db,
+		feeds:        make(map[string]*rss.Feed),
+		saverChannel: make(chan *PostSaveRequest),
+		db:           db,
 	}
 
 	go r.start()
+	go r.startSaver()
 
 	return r
 }
@@ -49,6 +60,17 @@ func (r *Reaper) start() {
 	}
 }
 
+func (r *Reaper) startSaver() {
+	for {
+		select {
+		case item := <-r.saverChannel:
+			r.db.SavePost(item.FeedURL, item.Title, item.Link, item.Date)
+		default:
+			time.Sleep(10 * time.Second)
+		}
+	}
+}
+
 // Add the given rss feed to Reaper for maintenance.
 func (r *Reaper) addFeed(f *rss.Feed) {
 	r.feeds[f.UpdateURL] = f
@@ -69,7 +91,37 @@ func (r *Reaper) refreshAllFeeds() {
 				defer func() {
 					<-semaphore
 				}()
+
+				originalListOfItems := f.Items
+
 				r.refreshFeed(f)
+
+				newItems := []*rss.Item{}
+				for _, item := range f.Items {
+					isNew := true
+					for _, originalItem := range originalListOfItems {
+						if item.Link == originalItem.Link {
+							isNew = false
+							break
+						}
+					}
+					if isNew {
+						newItems = append(newItems, item)
+					}
+				}
+
+				if len(newItems) > 0 {
+					log.Printf("Saving %d new items for feed %s\n", len(newItems), f.UpdateURL)
+
+					for _, newItem := range newItems {
+						r.saverChannel <- &PostSaveRequest{
+							FeedURL: f.UpdateURL,
+							Title:   newItem.Title,
+							Link:    newItem.Link,
+							Date:    newItem.Date.String(),
+						}
+					}
+				}
 			}(r.feeds[i])
 		}
 	}
