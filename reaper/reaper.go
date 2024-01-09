@@ -29,7 +29,7 @@ func New(db *sqlite.DB) *Reaper {
 }
 
 // Start initializes the reaper by populating a list of feeds from the database
-// and periodically refreshes all feeds every 15 minutes, if the feeds are
+// and periodically refreshes all feeds every hour, if the feeds are
 // stale.
 // reaper should only ever be started once (in New)
 func (r *Reaper) start() {
@@ -45,7 +45,7 @@ func (r *Reaper) start() {
 
 	for {
 		r.refreshAllFeeds()
-		time.Sleep(15 * time.Minute)
+		time.Sleep(1 * time.Hour)
 	}
 }
 
@@ -119,6 +119,15 @@ func (r *Reaper) GetUserFeeds(username string) []*rss.Feed {
 	return result
 }
 
+func (r *Reaper) GetAllFeeds() []*rss.Feed {
+	var result []*rss.Feed
+	for _, f := range r.feeds {
+		result = append(result, f)
+	}
+
+	return result
+}
+
 func (r *Reaper) SortFeeds(f []*rss.Feed) {
 	sort.Slice(f, func(i, j int) bool {
 		return f[i].UpdateURL < f[j].UpdateURL
@@ -128,9 +137,7 @@ func (r *Reaper) SortFeeds(f []*rss.Feed) {
 func (r *Reaper) SortFeedItemsByDate(feeds []*rss.Feed) []*rss.Item {
 	var posts []*rss.Item
 	for _, f := range feeds {
-		for _, i := range f.Items {
-			posts = append(posts, i)
-		}
+		posts = append(posts, f.Items...)
 	}
 
 	sort.Slice(posts, func(i, j int) bool {
