@@ -66,8 +66,7 @@ func (s *Site) aboutHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Site) globalHandler(w http.ResponseWriter, r *http.Request) {
-	items := s.reaper.SortFeedItemsByDate(s.reaper.GetAllFeeds())
-	items = items[:50]
+	items := s.db.GetLatestPosts(50)
 
 	s.renderPage(w, r, "global-feed", items)
 }
@@ -310,10 +309,11 @@ func (s *Site) register(username string, password string) error {
 // handler should do tbh.
 func (s *Site) renderPage(w http.ResponseWriter, r *http.Request, page string, data any) {
 	funcMap := template.FuncMap{
-		"printDomain": s.printDomain,
-		"timeSince":   s.timeSince,
-		"trimSpace":   strings.TrimSpace,
-		"escapeURL":   url.QueryEscape,
+		"printDomain":  s.printDomain,
+		"timeSince":    s.timeSince,
+		"timeSinceStr": s.timeSinceStr,
+		"trimSpace":    strings.TrimSpace,
+		"escapeURL":    url.QueryEscape,
 	}
 
 	tmplFiles := filepath.Join("files", "*.tmpl.html")
@@ -357,6 +357,14 @@ func (s *Site) printDomain(rawURL string) string {
 	trimmedStr = strings.TrimPrefix(trimmedStr, "https://")
 
 	return strings.Split(trimmedStr, "/")[0]
+}
+
+func (s *Site) timeSinceStr(t string) string {
+	parsedTime, err := time.Parse(time.RFC3339, t)
+	if err != nil {
+		return "unknown"
+	}
+	return s.timeSince(parsedTime)
 }
 
 func (s *Site) timeSince(t time.Time) string {

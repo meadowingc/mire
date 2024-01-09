@@ -18,6 +18,12 @@ type DB struct {
 	sql *sql.DB
 }
 
+type Post struct {
+	Title             string
+	URL               string
+	PublishedDatetime string
+}
+
 // New opens a sqlite database, populates it with tables, and
 // returns a ready-to-use *sqlite.DB object which is used for
 // abstracting database queries.
@@ -249,4 +255,142 @@ func (db *DB) GetFeedFetchError(url string) (string, error) {
 		return result.String, nil
 	}
 	return "", nil
+}
+
+func (db *DB) SavePostStruct(feedUrl string, post *Post) {
+	db.SavePost(feedUrl, post.Title, post.URL, post.PublishedDatetime)
+}
+
+func (db *DB) SavePost(feedUrl string, title string, url string, publishedDatetime string) {
+	feedId := db.GetFeedID(feedUrl)
+
+	_, err := db.sql.Exec("INSERT INTO post (feed_id, title, url, published_at) VALUES (?, ?, ?, ?) ON CONFLICT(url) DO NOTHING",
+		feedId, title, url, publishedDatetime)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func (db *DB) GetPostId(postUrl string) int {
+	var pid int
+	err := db.sql.QueryRow("SELECT id FROM post WHERE url=?", postUrl).Scan(&pid)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return pid
+}
+
+func (db *DB) GetLatestPosts(limit int) []*Post {
+	rows, err := db.sql.Query("SELECT title, url, published_at FROM post ORDER BY published_at DESC LIMIT ?", limit)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+
+	var posts []*Post
+	for rows.Next() {
+		var p Post
+		err = rows.Scan(&p.Title, &p.URL, &p.PublishedDatetime)
+		if err != nil {
+			log.Fatal(err)
+		}
+		posts = append(posts, &p)
+	}
+	return posts
+}
+
+func (db *DB) GetPostsForFeed(feedUrl string) []*Post {
+	feedId := db.GetFeedID(feedUrl)
+
+	rows, err := db.sql.Query("SELECT title, url, published_at FROM post WHERE feed_id=?", feedId)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+
+	var posts []*Post
+	for rows.Next() {
+		var p Post
+		err = rows.Scan(&p.Title, &p.URL, &p.PublishedDatetime)
+		if err != nil {
+			log.Fatal(err)
+		}
+		posts = append(posts, &p)
+	}
+	return posts
+}
+
+func (db *DB) GetPostsForUser(username string) []*Post {
+	uid := db.GetUserID(username)
+
+	rows, err := db.sql.Query(`
+		SELECT p.title, p.url, p.published_at
+		FROM post p
+		JOIN feed f ON p.feed_id = f.id
+		JOIN subscribe s ON f.id = s.feed_id
+		JOIN user u ON s.user_id = u.id
+		WHERE u.id = ?`, uid)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+
+	var posts []*Post
+	for rows.Next() {
+		var p Post
+		err = rows.Scan(&p.Title, &p.URL, &p.PublishedDatetime)
+		if err != nil {
+			log.Fatal(err)
+		}
+		posts = append(posts, &p)
+	}
+	return posts
+}
+
+func (db *DB) SetReadStatus(username string, postUrl string, read bool) {
+	userId := db.GetUserID(username)
+	postId := db.GetPostId(postUrl)
+
+	var exists bool
+	err := db.sql.QueryRow("SELECT 1 FROM post_read WHERE user_id=? AND post_id=?", userId, postId).Scan(&exists)
+	if err != nil && err != sql.ErrNoRows {
+		log.Fatal(err)
+	}
+
+	if exists {
+		_, err = db.sql.Exec("UPDATE post_read SET has_read=? WHERE user_id=? AND post_id=?", read, userId, postId)
+		if err != nil {
+			log.Fatal(err)
+		}
+	} else {
+		_, err = db.sql.Exec("INSERT INTO post_read(user_id, post_id, has_read) VALUES(?, ?, ?)", userId, postId, read)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+}
+
+func (db *DB) ToggleReadStatus(username string, postUrl string) {
+	userId := db.GetUserID(username)
+	postId := db.GetPostId(postUrl)
+
+	var read bool
+	err := db.sql.QueryRow("SELECT has_read FROM post_read WHERE user_id=? AND post_id=?", userId, postId).Scan(&read)
+	if err != nil && err != sql.ErrNoRows {
+		log.Fatal(err)
+	}
+
+	db.SetReadStatus(username, postUrl, !read)
+}
+
+func (db *DB) GetReadStatus(username string, postUrl string) bool {
+	userId := db.GetUserID(username)
+	postId := db.GetPostId(postUrl)
+
+	var read bool
+	err := db.sql.QueryRow("SELECT has_read FROM post_read WHERE user_id=? AND post_id=?", userId, postId).Scan(&read)
+	if err != nil && err != sql.ErrNoRows {
+		log.Fatal(err)
+	}
+	return read
 }

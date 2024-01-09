@@ -6,22 +6,10 @@
 
 <p>
 WIP 
-<!-- 
-type Item struct {
-	Title      string    `json:"title"`
-	Summary    string    `json:"summary"`
-	Categories []string  `json:"category"`
-	Link       string    `json:"link"`
-	Date       time.Time `json:"date"`
-	Image      *Image    `json:"image"`
-	DateValid  bool
-	ID         string       `json:"id"`
-	Enclosures []*Enclosure `json:"enclosures"`
-	Read       bool         `json:"read"`
-}
- -->
+
 {{ range .Data }}
-{{ .Link | escapeURL }}
+{{ .Title }}
+{{ .PublishedDatetime | timeSinceStr }}
 {{ . }}
 {{ end }}
 
