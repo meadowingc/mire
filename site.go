@@ -34,7 +34,7 @@ type Site struct {
 
 // New returns a fully populated & ready for action Site
 func New() *Site {
-	title := "vore"
+	title := "mire"
 	db := sqlite.New(title + ".db")
 
 	s := Site{
