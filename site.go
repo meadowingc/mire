@@ -72,10 +72,6 @@ func (s *Site) globalHandler(w http.ResponseWriter, r *http.Request) {
 	s.renderPage(w, r, "global-feed", items)
 }
 
-func (s *Site) discoverHandler(w http.ResponseWriter, r *http.Request) {
-	s.renderPage(w, r, "discover", nil)
-}
-
 func (s *Site) loginHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" {
 		if s.loggedIn(r) {
@@ -130,7 +126,7 @@ func (s *Site) userHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	items := s.db.GetPostsForUser(username)
+	items := s.reaper.SortItemsByDate(s.db.GetPostsForUser(username))
 	data := struct {
 		User  string
 		Items []*rss.Item
