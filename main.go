@@ -16,7 +16,6 @@ func main() {
 	mux.HandleFunc("GET /{username}", s.userHandler)
 	mux.HandleFunc("GET /static/{file}", s.staticHandler)
 	mux.HandleFunc("GET /global-feed", s.globalHandler)
-	mux.HandleFunc("GET /discover", s.discoverHandler)
 	mux.HandleFunc("GET /settings", s.settingsHandler)
 	mux.HandleFunc("POST /settings/submit", s.settingsSubmitHandler)
 	mux.HandleFunc("GET /login", s.loginHandler)

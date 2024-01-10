@@ -3,68 +3,97 @@
 {{ template "nav" . }}
 
 <main>
-{{ $length := len .Data.Items }} 
+	{{ $length := len .Data.Items }}
 
-{{ if eq $length 0 }}
-{{ if .LoggedIn }}
-<p>
-you don't seem to have any feeds yet.
+	{{ if eq $length 0 }}
+	{{ if .LoggedIn }}
+	<p>
+		you don't seem to have any feeds yet.
 
-<a href="/settings">add your first feed here!</a>
-</p>
-{{ end }} <!-- if .LoggedIn -->
-{{ end }} <!-- if eq $length 0 -->
+		<a href="/settings">add your first feed here!</a>
+	</p>
+	{{ end }} <!-- if .LoggedIn -->
+	{{ end }} <!-- if eq $length 0 -->
 
 
-{{ if .LoggedIn }}
+	{{ if .LoggedIn }}
 
-<ul>
-{{ range .Data.Items }}
-{{ $emoji := "" }}
-{{ $class := "" }}
-{{ if .Read }}
-    {{ $emoji = "📜" }}
-    {{ $class = "read" }}
-{{ else }}
-    {{ $emoji = "💌" }}
-    {{ $class = "unread" }}
-{{ end }}
-    <li>
-	<a href="javascript:void(0);" onclick="toggleReadStatus(event);">{{ $emoji }}</a>
-	<a href="{{ .Link }}" class="{{$class}}">
-        {{ .Title }} 
-    </a>
-    <br>
-    <span class=puny title="{{ .Date }}">published {{ .Date | timeSince }} via <a href="//{{ .Link | printDomain }}">{{ .Link | printDomain }}</a></span>
-    </li>
-{{ end }}
-</ul>
-{{ end }} <!-- if .LoggedIn -->
+	<ul>
+		{{ range .Data.Items }}
+		{{ $emoji := "" }}
+		{{ $class := "" }}
+		{{ if .Read }}
+		{{ $emoji = "📜" }}
+		{{ $class = "read" }}
+		{{ else }}
+		{{ $emoji = "💌" }}
+		{{ $class = "unread" }}
+		{{ end }}
+		<li>
+			<a href="javascript:void(0);" onclick="toggleReadStatus(event);">{{ $emoji }}</a>
+			<a href="{{ .Link }}" class="{{$class}}" onclick="visitLink(event);">
+				{{ .Title }}
+			</a>
+			<br>
+			<span class=puny title="{{ .Date }}">published {{ .Date | timeSince }} via <a
+					href="//{{ .Link | printDomain }}">{{ .Link | printDomain }}</a></span>
+		</li>
+		{{ end }}
+	</ul>
+	{{ end }} <!-- if .LoggedIn -->
 </main>
 
 
-<script >
-function toggleReadStatus(event) {
-    const element = event.target; 
-	const titleElement = element.parentElement.querySelectorAll("a")[1];
-	const isRead = titleElement.className === "read";
+<script>
+	function toggleReadStatus(event) {
+		const element = event.target;
+		const titleElement = element.parentElement.querySelectorAll("a")[1];
+		const isRead = titleElement.className === "read";
 
-	const postUrl = encodeURIComponent(titleElement.href);
-	const newReadStatus = !isRead;
+		const postUrl = encodeURIComponent(titleElement.href);
+		const newReadStatus = !isRead;
 
-	fetch(`/api/v1/set-post-status/${postUrl}`, {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/x-www-form-urlencoded"
-		},
-		body: `new_has_read=${encodeURIComponent(newReadStatus)}`
-	}).then(function(response) {
-		if (response.ok) {
-			titleElement.className = newReadStatus ? "read" : "unread";
-			element.innerText = newReadStatus ? "📜" : "💌";
+		titleElement.className = newReadStatus ? "read" : "unread";
+		element.innerText = newReadStatus ? "📜" : "💌";
+
+		setReadStatus(postUrl, newReadStatus).then(function (response) {
+			if (response.status !== 200) {
+				// undo the change
+				titleElement.className = isRead ? "read" : "unread";
+				element.innerText = isRead ? "📜" : "💌";
+			}
+		});
+	}
+
+	async function visitLink(event) {
+		const element = event.target;
+		const postUrl = encodeURIComponent(element.href);
+		
+		element.parentElement.querySelectorAll("a")[0].innerText = "📜";
+		element.className = "read";
+
+		// Always mark the post as read
+		await setReadStatus(postUrl, true);
+
+		if (event.ctrlKey || event.metaKey) {
+			// Ctrl or Cmd was pressed, open the link in a new tab, which is the default behavior
+		} else {
+			// Ctrl or Cmd was not pressed, navigate to the link in the current tab
+			event.preventDefault();
+			window.location.href = element.href;
 		}
-	});
-}
+	}
+
+	function setReadStatus(postUrl, newReadStatus) {
+		postUrl = encodeURIComponent(postUrl);
+		return fetch(`/api/v1/set-post-status/${postUrl}`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/x-www-form-urlencoded"
+			},
+			body: `new_has_read=${encodeURIComponent(newReadStatus)}`
+		});
+	}
 </script>
 
 {{ template "tail" . }}

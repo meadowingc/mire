@@ -192,6 +192,10 @@ func (r *Reaper) SortFeedItemsByDate(feeds []*rss.Feed) []*rss.Item {
 		posts = append(posts, f.Items...)
 	}
 
+	return r.SortItemsByDate(posts)
+}
+
+func (r *Reaper) SortItemsByDate(posts []*rss.Item) []*rss.Item {
 	sort.Slice(posts, func(i, j int) bool {
 		return posts[i].Date.After(posts[j].Date)
 	})
