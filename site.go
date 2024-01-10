@@ -69,7 +69,7 @@ func (s *Site) aboutHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Site) globalHandler(w http.ResponseWriter, r *http.Request) {
 	items := s.db.GetLatestPosts(50)
 
-	s.renderPage(w, r, "global-feed", items)
+	s.renderPage(w, r, "global", items)
 }
 
 func (s *Site) loginHandler(w http.ResponseWriter, r *http.Request) {

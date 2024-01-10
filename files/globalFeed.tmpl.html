@@ -1,19 +1,32 @@
-{{ define "global-feed" }}
+{{ define "global" }}
 {{ template "head" . }}
 {{ template "nav" . }}
+
+<main>
 
 <h3>global</h3>
 
 <p>
-WIP 
-
-{{ range .Data }}
-{{ .Title }}
-{{ .PublishedDatetime | timeSince }}
-{{ . }}
-{{ end }}
-
+Here you're seeing the last {{ len .Data }} posts from all feeds known to the system.
 </p>
+
+<ul>
+{{ range .Data }}
+<li>
+
+<a href="{{ .URL }}">
+    {{ .Title }}
+</a>
+<br>
+<span class=puny 
+      title="{{ .PublishedDatetime }}">published {{ .PublishedDatetime | timeSince }} via <a
+      href="//{{ .URL | printDomain }}">{{ .URL | printDomain }}</a></span>
+
+</li>
+{{ end }}
+</ul>
+
+</main>
 
 {{ template "tail" . }}
 {{ end }}
