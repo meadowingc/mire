@@ -181,8 +181,10 @@ func (db *DB) Subscribe(username string, feedURL string) {
 }
 
 func (db *DB) UnsubscribeAll(username string) {
+	userId := db.GetUserID(username)
+
 	lock()
-	_, err := db.sql.Exec("DELETE FROM subscribe WHERE user_id=?", db.GetUserID(username))
+	_, err := db.sql.Exec("DELETE FROM subscribe WHERE user_id=?", userId)
 	unlock()
 
 	if err != nil {
