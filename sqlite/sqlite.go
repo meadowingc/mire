@@ -487,6 +487,18 @@ func (db *DB) GetPostsForUser(username string) []*rss.Item {
 	return posts
 }
 
+func (db *DB) GetRandomPost() *Post {
+	lock()
+	defer unlock()
+
+	var p Post
+	err := db.sql.QueryRow("SELECT title, url, published_at FROM post ORDER BY RANDOM() LIMIT 1").Scan(&p.Title, &p.URL, &p.PublishedDatetime)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return &p
+}
+
 func (db *DB) SetReadStatus(username string, postUrl string, read bool) {
 	userId := db.GetUserID(username)
 	postId := db.GetPostId(postUrl)
