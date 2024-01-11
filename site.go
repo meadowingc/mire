@@ -327,6 +327,12 @@ func (s *Site) register(username string, password string) error {
 	return nil
 }
 
+func (s *Site) visitRandomPostHandler(w http.ResponseWriter, r *http.Request) {
+	post := s.db.GetRandomPost()
+
+	http.Redirect(w, r, post.URL, http.StatusSeeOther)
+}
+
 func (s *Site) apiSetPostReadStatus(w http.ResponseWriter, r *http.Request) {
 	if !s.loggedIn(r) {
 		s.renderErr(w, "", http.StatusUnauthorized)
