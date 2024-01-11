@@ -223,6 +223,10 @@ func (s *Site) settingsSubmitHandler(w http.ResponseWriter, r *http.Request) {
 	for _, url := range validatedURLs {
 		s.db.Subscribe(s.username(r), url)
 	}
+
+	s.db.DeleteOrphanedPostReads(s.username(r))
+	s.db.DeleteOrphanFeeds()
+
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 
