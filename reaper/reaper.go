@@ -34,7 +34,7 @@ func New(db *sqlite.DB) *Reaper {
 	}
 
 	go r.start()
-	go r.startSaver()
+	go r.startDbSaver()
 
 	return r
 }
@@ -60,7 +60,7 @@ func (r *Reaper) start() {
 	}
 }
 
-func (r *Reaper) startSaver() {
+func (r *Reaper) startDbSaver() {
 	for {
 		select {
 		case item := <-r.saverChannel:
@@ -76,65 +76,65 @@ func (r *Reaper) addFeed(f *rss.Feed) {
 	r.feeds[f.UpdateURL] = f
 }
 
-// UpdateAll fetches every feed & attempts updating them
-// asynchronously, then prints the duration of the sync
-func (r *Reaper) refreshAllFeeds() {
-	start := time.Now()
-	semaphore := make(chan struct{}, 20)
+func (r *Reaper) updateFeedAndSaveNewItemsToDb(f *rss.Feed) {
+	originalListOfItems := f.Items
 
-	for i := range r.feeds {
-		if r.feeds[i].Stale() {
-			semaphore <- struct{}{}
-
-			go func(f *rss.Feed) {
-				// ensure we always free the channel
-				defer func() {
-					<-semaphore
-				}()
-
-				originalListOfItems := f.Items
-
-				r.refreshFeed(f)
-
-				newItems := []*rss.Item{}
-				for _, item := range f.Items {
-					isNew := true
-					for _, originalItem := range originalListOfItems {
-						if item.Link == originalItem.Link {
-							isNew = false
-							break
-						}
-					}
-					if isNew {
-						newItems = append(newItems, item)
-					}
-				}
-
-				if len(newItems) > 0 {
-					log.Printf("Saving %d new items for feed %s\n", len(newItems), f.UpdateURL)
-
-					for _, newItem := range newItems {
-						r.saverChannel <- &PostSaveRequest{
-							FeedURL: f.UpdateURL,
-							Title:   newItem.Title,
-							Link:    newItem.Link,
-							Date:    newItem.Date,
-						}
-					}
-				}
-			}(r.feeds[i])
-		}
-	}
-	log.Printf("reaper: refresh complete in %s\n", time.Since(start))
-}
-
-// refreshFeed triggers a fetch on the given feed,
-// and sets a fetch error in the db if there is one.
-func (r *Reaper) refreshFeed(f *rss.Feed) {
 	err := f.Update()
 	if err != nil {
 		r.handleFeedFetchFailure(f.UpdateURL, err)
 	}
+
+	newItems := []*rss.Item{}
+	for _, item := range f.Items {
+		isNew := true
+		for _, originalItem := range originalListOfItems {
+			if item.Link == originalItem.Link {
+				isNew = false
+				break
+			}
+		}
+		if isNew {
+			newItems = append(newItems, item)
+		}
+	}
+
+	if len(newItems) > 0 {
+		log.Printf("Saving %d new items for feed %s\n", len(newItems), f.UpdateURL)
+
+		for _, newItem := range newItems {
+			r.saverChannel <- &PostSaveRequest{
+				FeedURL: f.UpdateURL,
+				Title:   newItem.Title,
+				Link:    newItem.Link,
+				Date:    newItem.Date,
+			}
+		}
+	}
+}
+
+// UpdateAll fetches every feed & attempts updating them
+// asynchronously, then prints the duration of the sync
+func (r *Reaper) refreshAllFeeds() {
+	start := time.Now()
+
+	semaphore := make(chan struct{}, 20)
+
+	for i := range r.feeds {
+		if r.feeds[i].Stale() {
+			semaphore <- struct{}{} // acquire a token
+			go func(feed *rss.Feed) {
+				defer func() { <-semaphore }() // release the token when done
+				r.updateFeedAndSaveNewItemsToDb(feed)
+			}(r.feeds[i])
+		}
+	}
+
+	// wait for all goroutines to finish
+	for i := 0; i < cap(semaphore); i++ {
+		semaphore <- struct{}{}
+	}
+
+	log.Printf("reaper: refresh complete in %s\n", time.Since(start))
 }
 
 func (r *Reaper) handleFeedFetchFailure(url string, err error) {

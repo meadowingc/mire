@@ -182,18 +182,40 @@ func (s *Site) settingsSubmitHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// write to reaper + db
+	semaphore := make(chan struct{}, 20)
+
 	for _, u := range validatedURLs {
-		// if it's in reaper, it's in the db, safe to skip
-		if s.reaper.HasFeed(u) {
-			continue
-		}
-		err := s.reaper.Fetch(u)
-		if err != nil {
-			e := fmt.Sprintf("reaper: can't fetch '%s' %s", u, err)
-			s.renderErr(w, e, http.StatusBadRequest)
-			return
-		}
-		s.db.WriteFeed(u)
+		semaphore <- struct{}{} // acquire a token
+		go func(u string) {
+			defer func() { <-semaphore }() // release the token when done
+
+			// if it's in reaper, it's in the db, safe to skip
+			if s.reaper.HasFeed(u) {
+				return
+			}
+
+			err := s.reaper.Fetch(u)
+			if err != nil {
+				e := fmt.Sprintf("reaper: can't fetch '%s' %s", u, err)
+				s.renderErr(w, e, http.StatusBadRequest)
+				return
+			}
+			s.db.WriteFeed(u)
+
+			newFeed := s.reaper.GetFeed(u)
+
+			// save feed posts to db
+			for _, post := range newFeed.Items {
+				s.db.SavePost(u, post.Title, post.Link, post.Date)
+			}
+
+			log.Printf("reaper: registered new feed '%s' with '%d' posts\n", u, len(newFeed.Items))
+		}(u)
+	}
+
+	// wait for all goroutines to finish
+	for i := 0; i < cap(semaphore); i++ {
+		semaphore <- struct{}{}
 	}
 
 	// subscribe to all listed feeds exclusively
