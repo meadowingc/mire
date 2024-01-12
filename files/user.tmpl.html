@@ -15,8 +15,6 @@
 	{{ end }} <!-- if .LoggedIn -->
 	{{ end }} <!-- if eq $length 0 -->
 
-
-	{{ if .LoggedIn }}
 	<p class="puny" style="margin-top: 2em;">Displaying last {{ len .Data.Items }} posts from user timeline</p>
 	<ul>
 		{{ range .Data.Items }}
@@ -40,12 +38,12 @@
 		</li>
 		{{ end }}
 	</ul>
-	{{ end }} <!-- if .LoggedIn -->
 </main>
 
 
 <script>
 	function toggleReadStatus(event) {
+		// {{ if eq .Username .Data.User}}
 		const element = event.target;
 		const titleElement = element.parentElement.querySelectorAll("a")[1];
 		const isRead = titleElement.className === "read";
@@ -63,9 +61,11 @@
 				element.innerText = isRead ? "📜" : "💌";
 			}
 		});
+		// {{ end }}
 	}
 
 	async function visitLink(event) {
+		// {{ if eq .Username .Data.User}}
 		event.preventDefault();
 
 		const element = event.target;
@@ -84,9 +84,11 @@
 			// Ctrl or Cmd was not pressed, navigate to the link in the current tab
 			window.location.href = element.href;
 		}
+		// {{ end }}
 	}
 
 	function setReadStatus(postUrl, newReadStatus) {
+		// {{ if eq .Username .Data.User}}
 		postUrl = encodeURIComponent(postUrl);
 		return fetch(`/api/v1/set-post-status/${postUrl}`, {
 			method: "POST",
@@ -95,6 +97,7 @@
 			},
 			body: `new_has_read=${encodeURIComponent(newReadStatus)}`
 		});
+		// {{ end }}
 	}
 </script>
 
