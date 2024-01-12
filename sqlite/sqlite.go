@@ -451,7 +451,7 @@ func (db *DB) GetPostsForFeed(feedUrl string) []*Post {
 	return posts
 }
 
-func (db *DB) GetPostsForUser(username string, limit int) []*rss.Item {
+func (db *DB) GetPostsForUser(username string, limit int, includeReadStatus bool) []*rss.Item {
 	uid := db.GetUserID(username)
 
 	lock()
@@ -482,8 +482,10 @@ func (db *DB) GetPostsForUser(username string, limit int) []*rss.Item {
 	rows.Close()
 	unlock()
 
-	for _, p := range posts {
-		p.Read = db.GetReadStatus(username, p.Link)
+	if includeReadStatus {
+		for _, p := range posts {
+			p.Read = db.GetReadStatus(username, p.Link)
+		}
 	}
 
 	return posts

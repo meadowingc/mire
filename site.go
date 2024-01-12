@@ -126,13 +126,20 @@ func (s *Site) userHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	items := s.db.GetPostsForUser(username, 75)
+	// only get read status if the user is logged in and requesting their own
+	// page
+	isUserRequestingOwnPage := s.username(r) == username
+	shouldGetReadStatus := isUserRequestingOwnPage
+
+	items := s.db.GetPostsForUser(username, 75, shouldGetReadStatus)
 	data := struct {
-		User  string
-		Items []*rss.Item
+		User              string
+		Items             []*rss.Item
+		RequestingOwnPage bool
 	}{
-		User:  username,
-		Items: items,
+		User:              username,
+		Items:             items,
+		RequestingOwnPage: isUserRequestingOwnPage,
 	}
 
 	s.renderPage(w, r, "user", data)
