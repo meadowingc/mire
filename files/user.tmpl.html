@@ -17,7 +17,7 @@
 
 
 	{{ if .LoggedIn }}
-
+	<p>Displaying last {{ len .Data.Items }} posts from user timeline</p>
 	<ul>
 		{{ range .Data.Items }}
 		{{ $emoji := "" }}
@@ -66,6 +66,8 @@
 	}
 
 	async function visitLink(event) {
+		event.preventDefault();
+
 		const element = event.target;
 		const postUrl = encodeURIComponent(element.href);
 		
@@ -77,9 +79,9 @@
 
 		if (event.ctrlKey || event.metaKey) {
 			// Ctrl or Cmd was pressed, open the link in a new tab, which is the default behavior
+			window.open(element.href, "_blank");
 		} else {
 			// Ctrl or Cmd was not pressed, navigate to the link in the current tab
-			event.preventDefault();
 			window.location.href = element.href;
 		}
 	}

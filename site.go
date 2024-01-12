@@ -126,7 +126,7 @@ func (s *Site) userHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	items := s.reaper.SortItemsByDate(s.db.GetPostsForUser(username))
+	items := s.db.GetPostsForUser(username, 75)
 	data := struct {
 		User  string
 		Items []*rss.Item

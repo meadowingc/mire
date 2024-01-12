@@ -451,7 +451,7 @@ func (db *DB) GetPostsForFeed(feedUrl string) []*Post {
 	return posts
 }
 
-func (db *DB) GetPostsForUser(username string) []*rss.Item {
+func (db *DB) GetPostsForUser(username string, limit int) []*rss.Item {
 	uid := db.GetUserID(username)
 
 	lock()
@@ -461,7 +461,9 @@ func (db *DB) GetPostsForUser(username string) []*rss.Item {
 		JOIN feed f ON p.feed_id = f.id
 		JOIN subscribe s ON f.id = s.feed_id
 		JOIN user u ON s.user_id = u.id
-		WHERE u.id = ?`, uid)
+		WHERE u.id = ?
+		ORDER BY p.published_at DESC
+		LIMIT ?`, uid, limit)
 	if err != nil {
 		log.Fatal(err)
 	}
