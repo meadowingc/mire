@@ -447,7 +447,7 @@ func (s *Site) timeSince(t time.Time) string {
 	years := int(duration.Hours() / (24 * 7 * 4 * 12))
 
 	if years > 100 {
-		return fmt.Sprintf("over 100 years ago ಠ_ಠ")
+		return "over 100 years ago ಠ_ಠ"
 	} else if years > 1 {
 		return fmt.Sprintf("%d years ago", years)
 	} else if months > 1 {
@@ -461,7 +461,7 @@ func (s *Site) timeSince(t time.Time) string {
 	} else if minutes > 1 {
 		return fmt.Sprintf("%d mins ago", minutes)
 	} else {
-		return fmt.Sprintf("just now")
+		return "just now"
 	}
 }
 
