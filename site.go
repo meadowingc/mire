@@ -56,7 +56,7 @@ func (s *Site) staticHandler(w http.ResponseWriter, r *http.Request) {
 
 func (s *Site) indexHandler(w http.ResponseWriter, r *http.Request) {
 	if s.loggedIn(r) {
-		http.Redirect(w, r, "/"+s.username(r), http.StatusSeeOther)
+		http.Redirect(w, r, "/u/"+s.username(r), http.StatusSeeOther)
 		return
 	}
 	s.renderPage(w, r, "index", nil)
@@ -138,14 +138,33 @@ func (s *Site) userHandler(w http.ResponseWriter, r *http.Request) {
 	s.renderPage(w, r, "user", data)
 }
 
+func (s *Site) userBlogrollHandler(w http.ResponseWriter, r *http.Request) {
+	username := muxpatterns.PathValue(r, "username")
+
+	if !s.db.UserExists(username) {
+		http.NotFound(w, r)
+		return
+	}
+
+	items := s.db.GetUserFeedURLs(username)
+	data := struct {
+		User  string
+		Items []string
+	}{
+		User:  username,
+		Items: items,
+	}
+
+	s.renderPage(w, r, "blogroll", data)
+}
+
 func (s *Site) settingsHandler(w http.ResponseWriter, r *http.Request) {
 	if !s.loggedIn(r) {
 		s.renderErr(w, "", http.StatusUnauthorized)
 		return
 	}
 
-	var feeds []*rss.Feed
-	feeds = s.reaper.GetUserFeeds(s.username(r))
+	feeds := s.reaper.GetUserFeeds(s.username(r))
 	s.renderPage(w, r, "settings", feeds)
 }
 

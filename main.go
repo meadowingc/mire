@@ -13,7 +13,8 @@ func main() {
 
 	mux.HandleFunc("GET /{$}", s.indexHandler)
 	mux.HandleFunc("GET /about", s.aboutHandler)
-	mux.HandleFunc("GET /{username}", s.userHandler)
+	mux.HandleFunc("GET /u/{username}", s.userHandler)
+	mux.HandleFunc("GET /u/{username}/blogroll", s.userBlogrollHandler)
 	mux.HandleFunc("GET /static/{file}", s.staticHandler)
 	mux.HandleFunc("GET /global", s.globalHandler)
 	mux.HandleFunc("GET /random", s.visitRandomPostHandler)

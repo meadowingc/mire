@@ -1,0 +1,28 @@
+{{ define "blogroll" }}
+{{ template "head" . }}
+{{ template "nav" . }}
+
+<main class="content-page">
+	{{ $length := len .Data.Items }}
+
+	{{ if eq $length 0 }}
+	<p>
+		<i>{{.Data.User}}</i> doesn't seem to be subscribed to any feeds.
+	</p>
+	{{ else }} <!-- if eq $length 0 -->
+
+	<p class="puny" style="margin-top: 2em;"><i>{{.Data.User}}</i> is subscribed to {{$length}} feeds.</p>
+
+	<ul>
+	{{ range .Data.Items }}
+		<li>
+			<a target="_blank" href="//{{. | printDomain}}">{{. | printDomain}}</a> (<a href="{{.}}">feed</a>) 
+		</li>
+	{{ end }}
+	</ul>
+
+	{{ end }} <!-- if eq $length 0 -->
+</main>
+
+{{ template "tail" . }}
+{{ end }}
