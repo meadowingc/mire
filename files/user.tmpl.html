@@ -17,7 +17,7 @@
 
 
 	{{ if .LoggedIn }}
-	<p>Displaying last {{ len .Data.Items }} posts from user timeline</p>
+	<p class="puny" style="margin-top: 2em;">Displaying last {{ len .Data.Items }} posts from user timeline</p>
 	<ul>
 		{{ range .Data.Items }}
 		{{ $emoji := "" }}
