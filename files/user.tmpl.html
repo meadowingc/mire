@@ -15,7 +15,7 @@
 	{{ end }} <!-- if .LoggedIn -->
 	{{ end }} <!-- if eq $length 0 -->
 
-	<p class="puny" style="margin-top: 2em;">Displaying last {{ len .Data.Items }} posts from user timeline</p>
+	<p class="puny" style="margin-top: 2em;">Displaying last {{ len .Data.Items }} posts from user's timeline</p>
 	<ul>
 		{{ range .Data.Items }}
 		{{ $emoji := "" }}
@@ -28,13 +28,17 @@
 		{{ $class = "unread" }}
 		{{ end }}
 		<li>
+			{{ if $.Data.RequestingOwnPage }}
 			<a href="javascript:void(0);" onclick="toggleReadStatus(event);">{{ $emoji }}</a>
+			{{ end }}
+
 			<a href="{{ .Link }}" class="{{$class}}" onclick="visitLink(event);">
 				{{ .Title }}
 			</a>
 			<br>
-			<span class=puny title="{{ .Date }}">published {{ .Date | timeSince }} via <a
-					href="//{{ .Link | printDomain }}">{{ .Link | printDomain }}</a></span>
+			<span class=puny title="{{ .Date }}">
+				published {{ .Date | timeSince }} via <a href="//{{ .Link | printDomain }}">{{ .Link | printDomain }}</a>
+			</span>
 		</li>
 		{{ end }}
 	</ul>
@@ -43,7 +47,7 @@
 
 <script>
 	function toggleReadStatus(event) {
-		// {{ if eq .Username .Data.User}}
+		// {{ if .Data.RequestingOwnPage }}
 		const element = event.target;
 		const titleElement = element.parentElement.querySelectorAll("a")[1];
 		const isRead = titleElement.className === "read";
@@ -65,7 +69,7 @@
 	}
 
 	async function visitLink(event) {
-		// {{ if eq .Username .Data.User}}
+		// {{ if .Data.RequestingOwnPage }}
 		event.preventDefault();
 
 		const element = event.target;
@@ -88,7 +92,7 @@
 	}
 
 	function setReadStatus(postUrl, newReadStatus) {
-		// {{ if eq .Username .Data.User}}
+		// {{ if .Data.RequestingOwnPage }}
 		postUrl = encodeURIComponent(postUrl);
 		return fetch(`/api/v1/set-post-status/${postUrl}`, {
 			method: "POST",
