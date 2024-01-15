@@ -2,6 +2,10 @@
 {{ template "head" . }}
 {{ template "nav" . }}
 
+<div id="loading-indicator" class="loading-indicator" style="display: none;">
+	<div class="loading-indicator__spinner"></div>
+</div>
+
 <main>
 	{{ $length := len .Data.Items }}
 
@@ -46,6 +50,10 @@
 
 
 <script>
+	(function () {
+		document.getElementById("loading-indicator").style.display = "none";
+	})();
+
 	function toggleReadStatus(event) {
 		// {{ if .Data.RequestingOwnPage }}
 		const element = event.target;
@@ -71,6 +79,8 @@
 	async function visitLink(event) {
 		// {{ if .Data.RequestingOwnPage }}
 		event.preventDefault();
+
+		document.getElementById("loading-indicator").style.display = "block";
 
 		const element = event.target;
 		const postUrl = encodeURIComponent(element.href);
