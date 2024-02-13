@@ -32,6 +32,8 @@ type Site struct {
 	db *sqlite.DB
 }
 
+var templates *template.Template
+
 // New returns a fully populated & ready for action Site
 func New() *Site {
 	title := "mire"
@@ -42,6 +44,17 @@ func New() *Site {
 		reaper: reaper.New(db),
 		db:     db,
 	}
+
+	funcMap := template.FuncMap{
+		"printDomain": s.printDomain,
+		"timeSince":   s.timeSince,
+		"trimSpace":   strings.TrimSpace,
+		"escapeURL":   url.QueryEscape,
+	}
+
+	tmplFiles := filepath.Join("files", "*.tmpl.html")
+	templates = template.Must(template.New("whatever").Funcs(funcMap).ParseGlob(tmplFiles))
+
 	return &s
 }
 
@@ -385,16 +398,6 @@ func (s *Site) apiSetPostReadStatus(w http.ResponseWriter, r *http.Request) {
 // template execution engine. it's normally the last thing a
 // handler should do tbh.
 func (s *Site) renderPage(w http.ResponseWriter, r *http.Request, page string, data any) {
-	funcMap := template.FuncMap{
-		"printDomain": s.printDomain,
-		"timeSince":   s.timeSince,
-		"trimSpace":   strings.TrimSpace,
-		"escapeURL":   url.QueryEscape,
-	}
-
-	tmplFiles := filepath.Join("files", "*.tmpl.html")
-	tmpl := template.Must(template.New("whatever").Funcs(funcMap).ParseGlob(tmplFiles))
-
 	// fields on this anon struct are generally
 	// pulled out of Data when they're globally required
 	// callers should jam anything they want into Data
@@ -412,7 +415,7 @@ func (s *Site) renderPage(w http.ResponseWriter, r *http.Request, page string, d
 		Data:       data,
 	}
 
-	err := tmpl.ExecuteTemplate(w, page, pageData)
+	err := templates.ExecuteTemplate(w, page, pageData)
 	if err != nil {
 		s.renderErr(w, err.Error(), http.StatusInternalServerError)
 		return
