@@ -3,3 +3,5 @@ vore.db
 tmp
 
 *.db
+
+__debug_bin*
