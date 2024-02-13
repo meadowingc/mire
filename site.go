@@ -18,7 +18,6 @@ import (
 	"git.j3s.sh/vore/reaper"
 	"git.j3s.sh/vore/rss"
 	"git.j3s.sh/vore/sqlite"
-	"github.com/jba/muxpatterns"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -60,7 +59,7 @@ func New() *Site {
 }
 
 func (s *Site) staticHandler(w http.ResponseWriter, r *http.Request) {
-	file := filepath.Join("files", "static", muxpatterns.PathValue(r, "file"))
+	file := filepath.Join("files", "static", r.PathValue("file"))
 	if _, err := os.Stat(file); !errors.Is(err, os.ErrNotExist) {
 		http.ServeFile(w, r, file)
 		return
@@ -133,7 +132,7 @@ func (s *Site) registerHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Site) userHandler(w http.ResponseWriter, r *http.Request) {
-	username := muxpatterns.PathValue(r, "username")
+	username := r.PathValue("username")
 
 	if !s.db.UserExists(username) {
 		http.NotFound(w, r)
@@ -182,7 +181,7 @@ func (s *Site) userHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Site) userBlogrollHandler(w http.ResponseWriter, r *http.Request) {
-	username := muxpatterns.PathValue(r, "username")
+	username := r.PathValue("username")
 
 	if !s.db.UserExists(username) {
 		http.NotFound(w, r)
@@ -293,7 +292,7 @@ func (s *Site) settingsSubmitHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Site) feedDetailsHandler(w http.ResponseWriter, r *http.Request) {
-	encodedURL := muxpatterns.PathValue(r, "url")
+	encodedURL := r.PathValue("url")
 	decodedURL, err := url.QueryUnescape(encodedURL)
 	if err != nil {
 		e := fmt.Sprintf("failed to decode URL '%s' %s", encodedURL, err)
@@ -401,7 +400,7 @@ func (s *Site) apiSetPostReadStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	postUrlEncoded := muxpatterns.PathValue(r, "postUrl")
+	postUrlEncoded := r.PathValue("postUrl")
 	postUrl, err := url.QueryUnescape(postUrlEncoded)
 	if err != nil {
 		s.renderErr(w, err.Error(), http.StatusBadRequest)

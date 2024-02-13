@@ -26,7 +26,7 @@
 
 	{{- if and .Data.RequestingOwnPage
 			   (gt (len .Data.OldestUnread) 0) -}}
-	<p class="puny" style="margin-top: 2em;">Displaying {{len .Data.OldestUnread}} oldest unread posts from user's timeline</p>
+	<p class="puny" style="margin-top: 2em;">Displaying {{len .Data.OldestUnread}} oldest unread posts from timeline</p>
 	<ul>
 		{{ range .Data.OldestUnread }}
 			{{ template "list_item" . }}
