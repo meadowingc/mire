@@ -83,8 +83,13 @@ nav a {
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 @media (prefers-color-scheme: dark) {
@@ -116,5 +121,9 @@ nav a {
 
   .puny {
     color: #a0a0a0;
+  }
+
+  .not-requesting-own-page .toggle-read-status-emoji {
+    display: none;
   }
 }

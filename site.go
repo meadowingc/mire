@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -145,13 +146,35 @@ func (s *Site) userHandler(w http.ResponseWriter, r *http.Request) {
 	shouldGetReadStatus := isUserRequestingOwnPage
 
 	items := s.db.GetPostsForUser(username, 75, shouldGetReadStatus)
+
+	// get the N oldest unread items
+	oldestItems := make([]*rss.Item, len(items))
+	copy(oldestItems, items)
+	sort.Slice(oldestItems, func(i, j int) bool {
+		return oldestItems[j].Date.After(oldestItems[i].Date)
+	})
+
+	const MAX_UNREAD_ITEMS = 7
+	oldestUnreadItems := make([]*rss.Item, 0)
+	for _, item := range oldestItems {
+		if !item.Read {
+			oldestUnreadItems = append(oldestUnreadItems, item)
+		}
+
+		if len(oldestUnreadItems) >= MAX_UNREAD_ITEMS {
+			break
+		}
+	}
+
 	data := struct {
 		User              string
 		Items             []*rss.Item
+		OldestUnread      []*rss.Item
 		RequestingOwnPage bool
 	}{
 		User:              username,
 		Items:             items,
+		OldestUnread:      oldestUnreadItems,
 		RequestingOwnPage: isUserRequestingOwnPage,
 	}
 
