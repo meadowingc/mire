@@ -495,11 +495,20 @@ func (db *DB) GetRandomPost() *Post {
 	lock()
 	defer unlock()
 
-	var p Post
-	err := db.sql.QueryRow("SELECT title, url, published_at FROM post ORDER BY RANDOM() LIMIT 1").Scan(&p.Title, &p.URL, &p.PublishedDatetime)
+	// First, select a random feed
+	var feedID int
+	err := db.sql.QueryRow("SELECT id FROM feed ORDER BY RANDOM() LIMIT 1").Scan(&feedID)
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// Then, select a random post from the chosen feed
+	var p Post
+	err = db.sql.QueryRow("SELECT title, url, published_at FROM post WHERE feed_id = ? ORDER BY RANDOM() LIMIT 1", feedID).Scan(&p.Title, &p.URL, &p.PublishedDatetime)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	return &p
 }
 
