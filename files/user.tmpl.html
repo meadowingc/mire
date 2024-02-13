@@ -6,7 +6,12 @@
 	<div class="loading-indicator__spinner"></div>
 </div>
 
-<main>
+{{ $mainClass := "requesting-own-page" }}
+{{- if not .Data.RequestingOwnPage -}}
+	{{ $mainClass = "not-requesting-own-page" }}
+{{- end -}}
+
+<main class="{{$mainClass}}">
 	{{ $length := len .Data.Items }}
 
 	{{ if eq $length 0 }}
@@ -19,31 +24,21 @@
 	{{ end }} <!-- if .LoggedIn -->
 	{{ end }} <!-- if eq $length 0 -->
 
+	{{- if and .Data.RequestingOwnPage
+			   (gt (len .Data.OldestUnread) 0) -}}
+	<p class="puny" style="margin-top: 2em;">Displaying {{len .Data.OldestUnread}} oldest unread posts from user's timeline</p>
+	<ul>
+		{{ range .Data.OldestUnread }}
+			{{ template "list_item" . }}
+		{{ end }}
+	</ul>
+	<hr/>
+	{{- end -}}
+
 	<p class="puny" style="margin-top: 2em;">Displaying last {{ len .Data.Items }} posts from user's timeline</p>
 	<ul>
 		{{ range .Data.Items }}
-		{{ $emoji := "" }}
-		{{ $class := "" }}
-		{{ if .Read }}
-		{{ $emoji = "📜" }}
-		{{ $class = "read" }}
-		{{ else }}
-		{{ $emoji = "💌" }}
-		{{ $class = "unread" }}
-		{{ end }}
-		<li>
-			{{ if $.Data.RequestingOwnPage }}
-			<a href="javascript:void(0);" onclick="toggleReadStatus(event);">{{ $emoji }}</a>
-			{{ end }}
-
-			<a href="{{ .Link }}" class="{{$class}}" onclick="visitLink(event);">
-				{{ .Title }}
-			</a>
-			<br>
-			<span class=puny title="{{ .Date }}">
-				published {{ .Date | timeSince }} via <a href="//{{ .Link | printDomain }}">{{ .Link | printDomain }}</a>
-			</span>
-		</li>
+			{{ template "list_item" . }}
 		{{ end }}
 	</ul>
 </main>
@@ -84,7 +79,7 @@
 
 		const element = event.target;
 		const postUrl = encodeURIComponent(element.href);
-		
+
 		element.parentElement.querySelectorAll("a")[0].innerText = "📜";
 		element.className = "read";
 
