@@ -255,13 +255,15 @@ func (s *Site) settingsSubmitHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
+			// save feed to dabase
+			s.db.WriteFeed(u)
+
+			// try to get posts and save them
 			err := s.reaper.Fetch(u)
 			if err != nil {
-				e := fmt.Sprintf("reaper: can't fetch '%s' %s", u, err)
-				s.renderErr(w, e, http.StatusBadRequest)
+				fmt.Printf("reaper: can't fetch '%s' %s\n", u, err)
 				return
 			}
-			s.db.WriteFeed(u)
 
 			newFeed := s.reaper.GetFeed(u)
 

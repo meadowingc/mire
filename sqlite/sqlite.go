@@ -159,6 +159,7 @@ func (db *DB) AddUser(username string, passwordHash string) error {
 func (db *DB) Subscribe(username string, feedURL string) {
 	uid := db.GetUserID(username)
 	fid := db.GetFeedID(feedURL)
+
 	var id int
 
 	lock()
@@ -495,16 +496,17 @@ func (db *DB) GetRandomPost() *Post {
 	lock()
 	defer unlock()
 
-	// First, select a random feed
-	var feedID int
-	err := db.sql.QueryRow("SELECT id FROM feed ORDER BY RANDOM() LIMIT 1").Scan(&feedID)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Then, select a random post from the chosen feed
 	var p Post
-	err = db.sql.QueryRow("SELECT title, url, published_at FROM post WHERE feed_id = ? ORDER BY RANDOM() LIMIT 1", feedID).Scan(&p.Title, &p.URL, &p.PublishedDatetime)
+
+	// Select a random post from a feed that has at least one post
+	err := db.sql.QueryRow(`
+        SELECT title, url, published_at 
+        FROM post 
+        WHERE feed_id IN (SELECT id FROM feed WHERE EXISTS (SELECT 1 FROM post WHERE feed_id = feed.id))
+        ORDER BY RANDOM() 
+        LIMIT 1
+    `).Scan(&p.Title, &p.URL, &p.PublishedDatetime)
+
 	if err != nil {
 		log.Fatal(err)
 	}
