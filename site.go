@@ -37,7 +37,7 @@ var templates *template.Template
 // New returns a fully populated & ready for action Site
 func New() *Site {
 	title := "mire"
-	db := sqlite.New(title + ".db")
+	db := sqlite.New(title + ".db?_pragma=journal_mode(WAL)")
 
 	s := Site{
 		title:  title,
