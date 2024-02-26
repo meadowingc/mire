@@ -97,9 +97,7 @@ func unlock() {
 func (db *DB) GetUsernameBySessionToken(token string) string {
 	var username string
 
-	lock()
 	err := db.sql.QueryRow("SELECT username FROM user WHERE session_token=?", token).Scan(&username)
-	unlock()
 
 	if err == sql.ErrNoRows {
 		return ""
@@ -114,9 +112,7 @@ func (db *DB) GetUsernameBySessionToken(token string) string {
 func (db *DB) GetPassword(username string) string {
 	var password string
 
-	lock()
 	err := db.sql.QueryRow("SELECT password FROM user WHERE username=?", username).Scan(&password)
-	unlock()
 
 	if err == sql.ErrNoRows {
 		return ""
@@ -130,9 +126,7 @@ func (db *DB) GetPassword(username string) string {
 func (db *DB) GetSessionToken(username string) (string, error) {
 	var result sql.NullString
 
-	lock()
 	err := db.sql.QueryRow("SELECT session_token FROM user WHERE username=?", username).Scan(&result)
-	unlock()
 
 	if err == sql.ErrNoRows {
 		return "", nil
@@ -162,9 +156,7 @@ func (db *DB) Subscribe(username string, feedURL string) {
 
 	var id int
 
-	lock()
 	err := db.sql.QueryRow("SELECT id FROM subscribe WHERE user_id=? AND feed_id=?", uid, fid).Scan(&id)
-	unlock()
 
 	if err == sql.ErrNoRows {
 		lock()
@@ -196,9 +188,7 @@ func (db *DB) UnsubscribeAll(username string) {
 func (db *DB) UserExists(username string) bool {
 	var result string
 
-	lock()
 	err := db.sql.QueryRow("SELECT username FROM user WHERE username=?", username).Scan(&result)
-	unlock()
 
 	if err == sql.ErrNoRows {
 		return false
@@ -210,10 +200,6 @@ func (db *DB) UserExists(username string) bool {
 }
 
 func (db *DB) GetAllFeedURLs() []string {
-	// TODO: BAD SELECT STATEMENT!! SORRY :( --wesley
-	lock()
-	defer unlock()
-
 	rows, err := db.sql.Query("SELECT url FROM feed")
 	if err != nil {
 		log.Fatal(err)
@@ -234,9 +220,6 @@ func (db *DB) GetAllFeedURLs() []string {
 
 func (db *DB) GetUserFeedURLs(username string) []string {
 	uid := db.GetUserID(username)
-
-	lock()
-	defer unlock()
 
 	// this query returns sql rows representing the list of
 	// rss feed urls the user is subscribed to
@@ -313,9 +296,7 @@ func (db *DB) DeleteOrphanFeeds() {
 func (db *DB) GetUserID(username string) int {
 	var uid int
 
-	lock()
 	err := db.sql.QueryRow("SELECT id FROM user WHERE username=?", username).Scan(&uid)
-	unlock()
 
 	if err != nil {
 		log.Fatal(err)
@@ -326,9 +307,7 @@ func (db *DB) GetUserID(username string) int {
 func (db *DB) GetFeedID(feedURL string) int {
 	var fid int
 
-	lock()
 	err := db.sql.QueryRow("SELECT id FROM feed WHERE url=?", feedURL).Scan(&fid)
-	unlock()
 
 	if err != nil {
 		log.Fatal(err)
@@ -363,9 +342,7 @@ func (db *DB) SetFeedFetchError(url string, fetchErr string) error {
 func (db *DB) GetFeedFetchError(url string) (string, error) {
 	var result sql.NullString
 
-	lock()
 	err := db.sql.QueryRow("SELECT fetch_error FROM feed WHERE url=?", url).Scan(&result)
-	unlock()
 
 	if err != nil {
 		return "", err
@@ -396,9 +373,7 @@ func (db *DB) SavePost(feedUrl string, title string, url string, publishedDateti
 func (db *DB) GetPostId(postUrl string) int {
 	var pid int
 
-	lock()
 	err := db.sql.QueryRow("SELECT id FROM post WHERE url=?", postUrl).Scan(&pid)
-	unlock()
 
 	if err != nil {
 		log.Fatal(err)
@@ -407,9 +382,6 @@ func (db *DB) GetPostId(postUrl string) int {
 }
 
 func (db *DB) GetLatestPosts(limit int) []*Post {
-	lock()
-	defer unlock()
-
 	rows, err := db.sql.Query("SELECT title, url, published_at FROM post ORDER BY published_at DESC LIMIT ?", limit)
 	if err != nil {
 		log.Fatal(err)
@@ -430,9 +402,6 @@ func (db *DB) GetLatestPosts(limit int) []*Post {
 
 func (db *DB) GetPostsForFeed(feedUrl string) []*Post {
 	feedId := db.GetFeedID(feedUrl)
-
-	lock()
-	defer unlock()
 
 	rows, err := db.sql.Query("SELECT title, url, published_at FROM post WHERE feed_id=?", feedId)
 	if err != nil {
@@ -455,7 +424,6 @@ func (db *DB) GetPostsForFeed(feedUrl string) []*Post {
 func (db *DB) GetPostsForUser(username string, limit int, includeReadStatus bool) []*rss.Item {
 	uid := db.GetUserID(username)
 
-	lock()
 	rows, err := db.sql.Query(`
 		SELECT p.title, p.url, p.published_at
 		FROM post p
@@ -481,7 +449,6 @@ func (db *DB) GetPostsForUser(username string, limit int, includeReadStatus bool
 	}
 
 	rows.Close()
-	unlock()
 
 	if includeReadStatus {
 		for _, p := range posts {
@@ -493,9 +460,6 @@ func (db *DB) GetPostsForUser(username string, limit int, includeReadStatus bool
 }
 
 func (db *DB) GetRandomPost() *Post {
-	lock()
-	defer unlock()
-
 	var p Post
 
 	// Select a random post from a feed that has at least one post
@@ -519,12 +483,12 @@ func (db *DB) SetReadStatus(username string, postUrl string, read bool) {
 	postId := db.GetPostId(postUrl)
 
 	var exists bool
-	lock()
 	err := db.sql.QueryRow("SELECT 1 FROM post_read WHERE user_id=? AND post_id=?", userId, postId).Scan(&exists)
 	if err != nil && err != sql.ErrNoRows {
 		log.Fatal(err)
 	}
 
+	lock()
 	if exists {
 		_, err = db.sql.Exec("UPDATE post_read SET has_read=? WHERE user_id=? AND post_id=?", read, userId, postId)
 		if err != nil {
@@ -545,9 +509,7 @@ func (db *DB) ToggleReadStatus(username string, postUrl string) {
 
 	var read bool
 
-	lock()
 	err := db.sql.QueryRow("SELECT has_read FROM post_read WHERE user_id=? AND post_id=?", userId, postId).Scan(&read)
-	unlock()
 
 	if err != nil && err != sql.ErrNoRows {
 		log.Fatal(err)
@@ -562,9 +524,7 @@ func (db *DB) GetReadStatus(username string, postUrl string) bool {
 
 	var read bool
 
-	lock()
 	err := db.sql.QueryRow("SELECT has_read FROM post_read WHERE user_id=? AND post_id=?", userId, postId).Scan(&read)
-	unlock()
 
 	if err != nil && err != sql.ErrNoRows {
 		log.Fatal(err)
