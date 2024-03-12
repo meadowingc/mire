@@ -144,7 +144,7 @@ func (s *Site) userHandler(w http.ResponseWriter, r *http.Request) {
 	isUserRequestingOwnPage := s.username(r) == username
 	shouldGetReadStatus := isUserRequestingOwnPage
 
-	items := s.db.GetPostsForUser(username, 75, shouldGetReadStatus)
+	items := s.db.GetPostsForUser(username, 100, shouldGetReadStatus)
 
 	// get the N oldest unread items
 	oldestItems := make([]*rss.Item, len(items))
