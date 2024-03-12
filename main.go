@@ -31,6 +31,8 @@ func main() {
 	http.HandleFunc("GET /feeds", s.settingsHandler)
 	http.HandleFunc("POST /feeds/submit", s.settingsSubmitHandler)
 
+	go statsCalculatorProcess(s)
+
 	log.Println("main: listening on http://localhost:5544")
 	log.Fatal(http.ListenAndServe(":5544", nil))
 }

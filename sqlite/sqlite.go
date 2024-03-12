@@ -531,3 +531,33 @@ func (db *DB) GetReadStatus(username string, postUrl string) bool {
 	}
 	return read
 }
+
+func (db *DB) GetGlobalNumReadPosts() int {
+	var count int
+	err := db.sql.QueryRow("SELECT COUNT(*) FROM post_read WHERE has_read=1").Scan(&count)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+	return count
+}
+
+func (db *DB) GetGlobalNumUniqueFeeds() int {
+	var count int
+	err := db.sql.QueryRow("SELECT COUNT(DISTINCT feed_id) FROM subscribe").Scan(&count)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+	return count
+}
+
+func (db *DB) GetGlobalNumUsers() int {
+	var count int
+	err := db.sql.QueryRow("SELECT COUNT(*) FROM user").Scan(&count)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+	return count
+}

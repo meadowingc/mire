@@ -76,7 +76,7 @@ func (s *Site) indexHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Site) aboutHandler(w http.ResponseWriter, r *http.Request) {
-	s.renderPage(w, r, "about", nil)
+	s.renderPage(w, r, "about", globalStats)
 }
 
 func (s *Site) globalHandler(w http.ResponseWriter, r *http.Request) {
@@ -438,6 +438,16 @@ func (s *Site) renderPage(w http.ResponseWriter, r *http.Request, page string, d
 		CutePhrase: s.randomCutePhrase(),
 		Data:       data,
 	}
+
+	// funcMap := template.FuncMap{
+	// 	"printDomain": s.printDomain,
+	// 	"timeSince":   s.timeSince,
+	// 	"trimSpace":   strings.TrimSpace,
+	// 	"escapeURL":   url.QueryEscape,
+	// }
+
+	// tmplFiles := filepath.Join("files", "*.tmpl.html")
+	// templates = template.Must(template.New("whatever").Funcs(funcMap).ParseGlob(tmplFiles))
 
 	err := templates.ExecuteTemplate(w, page, pageData)
 	if err != nil {
