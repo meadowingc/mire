@@ -26,6 +26,10 @@ func main() {
 
 	// api functions
 	http.HandleFunc("POST /api/v1/set-post-status/{postUrl}", s.apiSetPostReadStatus)
+	http.HandleFunc("GET /api/v1/ping", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("pong"))
+	})
 
 	// left in-place for backwards compat
 	http.HandleFunc("GET /feeds", s.settingsHandler)
