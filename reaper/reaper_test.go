@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"codeberg.org/meadowingc/mire/rss"
 	"codeberg.org/meadowingc/mire/sqlite"
 )
 
@@ -20,18 +19,18 @@ func createNewTestDB() *sqlite.DB {
 func TestHasFeed(t *testing.T) {
 	db := createNewTestDB()
 	r := New(db)
-	f1 := rss.Feed{UpdateURL: "something"}
-	f2 := rss.Feed{UpdateURL: "strange"}
-	r.addFeed(&f1)
-	r.addFeed(&f2)
+
+	r.Fetch("https://visakanv.substack.com/feed")
+	r.Fetch("https://meadow.bearblog.dev/feed")
+
 	if r.HasFeed("banana") == true {
 		t.Fatal("reaper should not have a banana")
 	}
-	if r.HasFeed("something") == false {
-		t.Fatal("reaper should have something")
+	if r.HasFeed("https://meadow.bearblog.dev/feed") == false {
+		t.Fatal("reaper should have meadow.bearblog.dev")
 	}
-	if r.HasFeed("strange") == false {
-		t.Fatal("reaper should have strange")
+	if r.HasFeed("https://visakanv.substack.com/feed") == false {
+		t.Fatal("reaper should have visakanv.substack.com")
 	}
 }
 
@@ -43,8 +42,7 @@ func TestNewPostsGetAddedToDatabase(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 
-	f1 := rss.Feed{UpdateURL: "https://meadow.bearblog.dev/feed/"}
-	r.addFeed(&f1)
+	r.Fetch("https://meadow.bearblog.dev/feed")
 
 	time.Sleep(11 * time.Second) // 11 to account for the saver delay
 

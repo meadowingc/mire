@@ -5,21 +5,28 @@ import (
 	"sort"
 	"time"
 
-	"codeberg.org/meadowingc/mire/rss"
 	"codeberg.org/meadowingc/mire/sqlite"
+	"github.com/mmcdole/gofeed"
 )
 
+const timeToBecomeStale = 3 * time.Hour
+
 type PostSaveRequest struct {
-	FeedURL string
-	Title   string
-	Link    string
-	Date    time.Time
+	FeedLink string
+	Title    string
+	Link     string
+	Date     time.Time
+}
+
+type FeedHolder struct {
+	Feed        *gofeed.Feed
+	LastFetched time.Time
 }
 
 type Reaper struct {
 	// internal list of all rss feeds where the map
 	// key represents the url of the feed (which should be unique)
-	feeds map[string]*rss.Feed
+	feeds map[string]*FeedHolder
 
 	saverChannel chan *PostSaveRequest
 
@@ -28,7 +35,7 @@ type Reaper struct {
 
 func New(db *sqlite.DB) *Reaper {
 	r := &Reaper{
-		feeds:        make(map[string]*rss.Feed),
+		feeds:        make(map[string]*FeedHolder),
 		saverChannel: make(chan *PostSaveRequest),
 		db:           db,
 	}
@@ -40,18 +47,21 @@ func New(db *sqlite.DB) *Reaper {
 }
 
 // Start initializes the reaper by populating a list of feeds from the database
-// and periodically refreshes all feeds every hour, if the feeds are
-// stale.
+// and periodically refreshes all feeds every hour, if the feeds are stale.
 // reaper should only ever be started once (in New)
 func (r *Reaper) start() {
 	urls := r.db.GetAllFeedURLs()
 
 	for _, url := range urls {
-		// Setting UpdateURL lets us defer fetching
-		feed := &rss.Feed{
-			UpdateURL: url,
+		// Setting FeedLink lets us defer fetching
+		feed := &gofeed.Feed{
+			FeedLink: url,
 		}
-		r.feeds[url] = feed
+
+		r.feeds[url] = &FeedHolder{
+			Feed:        feed,
+			LastFetched: time.Now().Add(-timeToBecomeStale), // force refresh
+		}
 	}
 
 	for {
@@ -64,28 +74,29 @@ func (r *Reaper) startDbSaver() {
 	for {
 		select {
 		case item := <-r.saverChannel:
-			r.db.SavePost(item.FeedURL, item.Title, item.Link, item.Date)
+			r.db.SavePost(item.FeedLink, item.Title, item.Link, item.Date)
 		default:
 			time.Sleep(10 * time.Second)
 		}
 	}
 }
 
-// Add the given rss feed to Reaper for maintenance.
-func (r *Reaper) addFeed(f *rss.Feed) {
-	r.feeds[f.UpdateURL] = f
-}
-
-func (r *Reaper) updateFeedAndSaveNewItemsToDb(f *rss.Feed) {
+func (r *Reaper) updateFeedAndSaveNewItemsToDb(f *gofeed.Feed) {
 	originalListOfItems := f.Items
 
-	err := f.Update()
+	fp := gofeed.NewParser()
+	newF, err := fp.ParseURL(f.FeedLink)
+	newF.FeedLink = f.FeedLink // sometimes this gets overwritten for some reason
+
 	if err != nil {
-		r.handleFeedFetchFailure(f.UpdateURL, err)
+		r.handleFeedFetchFailure(newF.FeedLink, err)
+	} else {
+		r.feeds[newF.FeedLink].Feed = newF
+		r.feeds[newF.FeedLink].LastFetched = time.Now()
 	}
 
-	newItems := []*rss.Item{}
-	for _, item := range f.Items {
+	newItems := []*gofeed.Item{}
+	for _, item := range newF.Items {
 		isNew := true
 		for _, originalItem := range originalListOfItems {
 			if item.Link == originalItem.Link {
@@ -99,14 +110,14 @@ func (r *Reaper) updateFeedAndSaveNewItemsToDb(f *rss.Feed) {
 	}
 
 	if len(newItems) > 0 {
-		log.Printf("Saving %d new items for feed %s\n", len(newItems), f.UpdateURL)
+		log.Printf("Saving %d new items for feed %s\n", len(newItems), newF.FeedLink)
 
 		for _, newItem := range newItems {
 			r.saverChannel <- &PostSaveRequest{
-				FeedURL: f.UpdateURL,
-				Title:   newItem.Title,
-				Link:    newItem.Link,
-				Date:    newItem.Date,
+				FeedLink: newF.FeedLink,
+				Title:    newItem.Title,
+				Link:     newItem.Link,
+				Date:     *newItem.PublishedParsed,
 			}
 		}
 	}
@@ -120,11 +131,11 @@ func (r *Reaper) refreshAllFeeds() {
 	semaphore := make(chan struct{}, 20)
 
 	for i := range r.feeds {
-		if r.feeds[i].Stale() {
+		if r.feeds[i].LastFetched.Add(timeToBecomeStale).Before(time.Now()) {
 			semaphore <- struct{}{} // acquire a token
-			go func(feed *rss.Feed) {
+			go func(feedHolder *FeedHolder) {
 				defer func() { <-semaphore }() // release the token when done
-				r.updateFeedAndSaveNewItemsToDb(feed)
+				r.updateFeedAndSaveNewItemsToDb(feedHolder.Feed)
 			}(r.feeds[i])
 		}
 	}
@@ -154,40 +165,40 @@ func (r *Reaper) HasFeed(url string) bool {
 	return false
 }
 
-func (r *Reaper) GetFeed(url string) *rss.Feed {
-	return r.feeds[url]
+func (r *Reaper) GetFeed(url string) *gofeed.Feed {
+	return r.feeds[url].Feed
 }
 
 // GetUserFeeds returns a list of feeds
-func (r *Reaper) GetUserFeeds(username string) []*rss.Feed {
+func (r *Reaper) GetUserFeeds(username string) []*gofeed.Feed {
 	urls := r.db.GetUserFeedURLs(username)
-	var result []*rss.Feed
+	var result []*gofeed.Feed
 	for _, u := range urls {
 		// feeds in the db are guaranteed to be in reaper
-		result = append(result, r.feeds[u])
+		result = append(result, r.feeds[u].Feed)
 	}
 
 	r.SortFeeds(result)
 	return result
 }
 
-func (r *Reaper) GetAllFeeds() []*rss.Feed {
-	var result []*rss.Feed
+func (r *Reaper) GetAllFeeds() []*gofeed.Feed {
+	var result []*gofeed.Feed
 	for _, f := range r.feeds {
-		result = append(result, f)
+		result = append(result, f.Feed)
 	}
 
 	return result
 }
 
-func (r *Reaper) SortFeeds(f []*rss.Feed) {
+func (r *Reaper) SortFeeds(f []*gofeed.Feed) {
 	sort.Slice(f, func(i, j int) bool {
-		return f[i].UpdateURL < f[j].UpdateURL
+		return f[i].FeedLink < f[j].FeedLink
 	})
 }
 
-func (r *Reaper) SortFeedItemsByDate(feeds []*rss.Feed) []*rss.Item {
-	var posts []*rss.Item
+func (r *Reaper) SortFeedItemsByDate(feeds []*gofeed.Feed) []*gofeed.Item {
+	var posts []*gofeed.Item
 	for _, f := range feeds {
 		posts = append(posts, f.Items...)
 	}
@@ -195,9 +206,9 @@ func (r *Reaper) SortFeedItemsByDate(feeds []*rss.Feed) []*rss.Item {
 	return r.SortItemsByDate(posts)
 }
 
-func (r *Reaper) SortItemsByDate(posts []*rss.Item) []*rss.Item {
+func (r *Reaper) SortItemsByDate(posts []*gofeed.Item) []*gofeed.Item {
 	sort.Slice(posts, func(i, j int) bool {
-		return posts[i].Date.After(posts[j].Date)
+		return posts[i].PublishedParsed.After(*posts[j].PublishedParsed)
 	})
 	return posts
 }
@@ -205,12 +216,16 @@ func (r *Reaper) SortItemsByDate(posts []*rss.Item) []*rss.Item {
 // Fetch attempts to fetch a feed from a given url, marshal
 // it into a feed object, and manage it via reaper.
 func (r *Reaper) Fetch(url string) error {
-	feed, err := rss.Fetch(url)
+	fp := gofeed.NewParser()
+	feed, err := fp.ParseURL(url)
 	if err != nil {
 		return err
 	}
 
-	r.addFeed(feed)
+	r.feeds[url] = &FeedHolder{
+		Feed:        feed,
+		LastFetched: time.Now(),
+	}
 
 	return nil
 }
