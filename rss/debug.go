@@ -12,7 +12,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"git.j3s.sh/vore/rss"
+	"codeberg.org/meadowingc/mire/rss"
 )
 
 func main() {

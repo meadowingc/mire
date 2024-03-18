@@ -5,8 +5,8 @@ import (
 	"sort"
 	"time"
 
-	"git.j3s.sh/vore/rss"
-	"git.j3s.sh/vore/sqlite"
+	"codeberg.org/meadowingc/mire/rss"
+	"codeberg.org/meadowingc/mire/sqlite"
 )
 
 type PostSaveRequest struct {

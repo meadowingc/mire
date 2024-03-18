@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"git.j3s.sh/vore/rss"
+	"codeberg.org/meadowingc/mire/rss"
 	_ "github.com/glebarez/go-sqlite"
 )
 

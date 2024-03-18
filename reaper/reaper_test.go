@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"git.j3s.sh/vore/rss"
-	"git.j3s.sh/vore/sqlite"
+	"codeberg.org/meadowingc/mire/rss"
+	"codeberg.org/meadowingc/mire/sqlite"
 )
 
 func createNewTestDB() *sqlite.DB {

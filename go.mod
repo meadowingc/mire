@@ -1,4 +1,4 @@
-module git.j3s.sh/vore
+module codeberg.org/meadowingc/mire
 
 go 1.22
 
