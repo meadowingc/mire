@@ -14,10 +14,10 @@ import (
 	"strings"
 	"time"
 
-	"git.j3s.sh/vore/lib"
-	"git.j3s.sh/vore/reaper"
-	"git.j3s.sh/vore/rss"
-	"git.j3s.sh/vore/sqlite"
+	"codeberg.org/meadowingc/mire/lib"
+	"codeberg.org/meadowingc/mire/reaper"
+	"codeberg.org/meadowingc/mire/rss"
+	"codeberg.org/meadowingc/mire/sqlite"
 	"golang.org/x/crypto/bcrypt"
 )
 
