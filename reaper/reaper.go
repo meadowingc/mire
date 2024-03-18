@@ -86,11 +86,12 @@ func (r *Reaper) updateFeedAndSaveNewItemsToDb(f *gofeed.Feed) {
 
 	fp := gofeed.NewParser()
 	newF, err := fp.ParseURL(f.FeedLink)
-	newF.FeedLink = f.FeedLink // sometimes this gets overwritten for some reason
 
 	if err != nil {
-		r.handleFeedFetchFailure(newF.FeedLink, err)
+		r.handleFeedFetchFailure(f.FeedLink, err)
+		return
 	} else {
+		newF.FeedLink = f.FeedLink // sometimes this gets overwritten for some reason
 		r.feeds[newF.FeedLink].Feed = newF
 		r.feeds[newF.FeedLink].LastFetched = time.Now()
 	}
