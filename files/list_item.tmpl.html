@@ -2,22 +2,23 @@
 
 {{ $emoji := "" }}
 {{ $class := "" }}
-{{ if .Read }}
+{{ if .IsRead }}
 	{{ $emoji = "📜" }}
 	{{ $class = "read" }}
 {{ else }}
 	{{ $emoji = "💌" }}
 	{{ $class = "unread" }}
 {{ end }}
+{{ $post := .Post }}
 <li>
 	<a class="toggle-read-status-emoji" href="javascript:void(0);" onclick="toggleReadStatus(event);">{{ $emoji }}</a>
 
-	<a href="{{ .Link }}" class="{{$class}}" onclick="visitLink(event);">
-		{{ .Title }}
+	<a href="{{ $post.Link }}" class="{{$class}}" onclick="visitLink(event);">
+		{{ $post.Title }}
 	</a>
 	<br>
-	<span class=puny title="{{ .Date }}">
-		published {{ .Date | timeSince }} via <a href="//{{ .Link | printDomain }}">{{ .Link | printDomain }}</a>
+	<span class=puny title="{{ $post.PublishedParsed }}">
+		published {{ $post.PublishedParsed | timeSince }} via <a href="//{{ $post.Link | printDomain }}">{{ $post.Link | printDomain }}</a>
 	</span>
 </li>
 

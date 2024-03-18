@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"codeberg.org/meadowingc/mire/rss"
 	_ "github.com/glebarez/go-sqlite"
+	"github.com/mmcdole/gofeed"
 )
 
 //go:embed migrations/*.sql
@@ -24,6 +24,11 @@ type Post struct {
 	Title             string
 	URL               string
 	PublishedDatetime time.Time
+}
+
+type UserPostEntry struct {
+	Post   *gofeed.Item
+	IsRead bool
 }
 
 var mutex = make(chan struct{}, 1)
@@ -421,7 +426,7 @@ func (db *DB) GetPostsForFeed(feedUrl string) []*Post {
 	return posts
 }
 
-func (db *DB) GetPostsForUser(username string, limit int, includeReadStatus bool) []*rss.Item {
+func (db *DB) GetPostsForUser(username string, limit int, includeReadStatus bool) []*UserPostEntry {
 	uid := db.GetUserID(username)
 
 	rows, err := db.sql.Query(`
@@ -437,10 +442,10 @@ func (db *DB) GetPostsForUser(username string, limit int, includeReadStatus bool
 		log.Fatal(err)
 	}
 
-	var posts []*rss.Item
+	var posts []*gofeed.Item
 	for rows.Next() {
-		var p rss.Item
-		err = rows.Scan(&p.Title, &p.Link, &p.Date)
+		var p gofeed.Item
+		err = rows.Scan(&p.Title, &p.Link, &p.PublishedParsed)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -450,13 +455,15 @@ func (db *DB) GetPostsForUser(username string, limit int, includeReadStatus bool
 
 	rows.Close()
 
-	if includeReadStatus {
-		for _, p := range posts {
-			p.Read = db.GetReadStatus(username, p.Link)
+	var userPostsEntries []*UserPostEntry = make([]*UserPostEntry, len(posts))
+	for i, p := range posts {
+		userPostsEntries[i] = &UserPostEntry{Post: p}
+		if includeReadStatus {
+			userPostsEntries[i].IsRead = db.GetReadStatus(username, p.Link)
 		}
 	}
 
-	return posts
+	return userPostsEntries
 }
 
 func (db *DB) GetRandomPost() *Post {

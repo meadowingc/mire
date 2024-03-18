@@ -2,21 +2,20 @@
 {{ template "head" . }}
 {{ template "nav" . }}
 
-<h3>{{ .Data.Feed.UpdateURL }}</h3>
+<h3>{{ .Data.Feed.FeedLink }}</h3>
 
 <p>
 Title: {{ .Data.Feed.Title }}
 
 Description: {{ .Data.Feed.Description }}
 
-Next Refresh: {{ .Data.Feed.Refresh }}
 Last Fetch Failure: {{ if .Data.FetchFailure }}{{ .Data.FetchFailure }}{{ else }}never{{ end }}
 </p>
 {{ len .Data.Feed.Items }} Items:</p>
 {{ range .Data.Feed.Items }}
 <details>
 <summary>{{ .Title }}</summary>
-<p>Date: {{ .Date }}
+<p>Date: {{ .PublishedParsed }}
 Link: <a href="{{ .Link }}">{{ .Link }}</a>
 </p>
 </details>

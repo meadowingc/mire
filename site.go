@@ -16,8 +16,8 @@ import (
 
 	"codeberg.org/meadowingc/mire/lib"
 	"codeberg.org/meadowingc/mire/reaper"
-	"codeberg.org/meadowingc/mire/rss"
 	"codeberg.org/meadowingc/mire/sqlite"
+	"github.com/mmcdole/gofeed"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -147,33 +147,33 @@ func (s *Site) userHandler(w http.ResponseWriter, r *http.Request) {
 	items := s.db.GetPostsForUser(username, 100, shouldGetReadStatus)
 
 	// get the N oldest unread items
-	oldestItems := make([]*rss.Item, len(items))
+	oldestItems := make([]*sqlite.UserPostEntry, len(items))
 	copy(oldestItems, items)
 	sort.Slice(oldestItems, func(i, j int) bool {
-		return oldestItems[j].Date.After(oldestItems[i].Date)
+		return oldestItems[j].Post.PublishedParsed.After(*oldestItems[i].Post.PublishedParsed)
 	})
 
 	const MAX_UNREAD_ITEMS = 7
-	oldestUnreadItems := make([]*rss.Item, 0)
+	oldestUnreadPosts := make([]*sqlite.UserPostEntry, 0)
 	for _, item := range oldestItems {
-		if !item.Read {
-			oldestUnreadItems = append(oldestUnreadItems, item)
+		if !item.IsRead {
+			oldestUnreadPosts = append(oldestUnreadPosts, item)
 		}
 
-		if len(oldestUnreadItems) >= MAX_UNREAD_ITEMS {
+		if len(oldestUnreadPosts) >= MAX_UNREAD_ITEMS {
 			break
 		}
 	}
 
 	data := struct {
 		User              string
-		Items             []*rss.Item
-		OldestUnread      []*rss.Item
+		Items             []*sqlite.UserPostEntry
+		OldestUnread      []*sqlite.UserPostEntry
 		RequestingOwnPage bool
 	}{
 		User:              username,
 		Items:             items,
-		OldestUnread:      oldestUnreadItems,
+		OldestUnread:      oldestUnreadPosts,
 		RequestingOwnPage: isUserRequestingOwnPage,
 	}
 
@@ -269,7 +269,7 @@ func (s *Site) settingsSubmitHandler(w http.ResponseWriter, r *http.Request) {
 
 			// save feed posts to db
 			for _, post := range newFeed.Items {
-				s.db.SavePost(u, post.Title, post.Link, post.Date)
+				s.db.SavePost(u, post.Title, post.Link, *post.PublishedParsed)
 			}
 
 			log.Printf("reaper: registered new feed '%s' with '%d' posts\n", u, len(newFeed.Items))
@@ -309,7 +309,7 @@ func (s *Site) feedDetailsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	feedData := struct {
-		Feed         *rss.Feed
+		Feed         *gofeed.Feed
 		FetchFailure string
 	}{
 		Feed:         s.reaper.GetFeed(decodedURL),
