@@ -301,6 +301,7 @@ func (s *Site) feedDetailsHandler(w http.ResponseWriter, r *http.Request) {
 		s.renderErr(w, e, http.StatusBadRequest)
 		return
 	}
+
 	fetchErr, err := s.db.GetFeedFetchError(decodedURL)
 	if err != nil {
 		e := fmt.Sprintf("failed to fetch feed error '%s' %s", encodedURL, err)
