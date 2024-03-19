@@ -263,11 +263,12 @@ func (db *DB) DeleteOrphanedPostReads(username string) {
 	defer unlock()
 
 	_, err := db.sql.Exec(`
-		DELETE FROM post_read 
-		WHERE user_id = ? AND post_id IN (
-			SELECT post.id FROM post
-			LEFT JOIN subscribe ON post.feed_id = subscribe.feed_id
-			WHERE subscribe.user_id != ?
+        DELETE FROM post_read 
+        WHERE user_id = ? AND post_id IN (
+            SELECT post.id FROM post
+            WHERE post.feed_id NOT IN (
+                SELECT feed_id FROM subscribe WHERE user_id = ?
+            )
         )`, userId, userId)
 
 	if err != nil {
