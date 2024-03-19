@@ -2,7 +2,9 @@ package reaper
 
 import (
 	"log"
+	"regexp"
 	"sort"
+	"strings"
 	"time"
 
 	"codeberg.org/meadowingc/mire/sqlite"
@@ -81,8 +83,39 @@ func (r *Reaper) startDbSaver() {
 	}
 }
 
-func (r *Reaper) updateFeedAndSaveNewItemsToDb(f *gofeed.Feed) {
-	originalListOfItems := f.Items
+func sanitizeFeedItems(feed *gofeed.Feed) {
+	whitespaceRegexp := regexp.MustCompile(`\s+`)
+	seen := make(map[string]bool)
+	uniqueItems := make([]*gofeed.Item, 0)
+
+	for _, item := range feed.Items {
+		// collapse all whitespace and newlines to a single whitespace in item title
+		item.Title = whitespaceRegexp.ReplaceAllString(item.Title, " ")
+
+		// strip whitespaces in item link
+		item.Link = strings.TrimSpace(item.Link)
+
+		// if the link is not in the seen map, add it to uniqueItems and mark it as seen
+		if !seen[item.Link] {
+			seen[item.Link] = true
+
+			if item.Link != "" {
+				uniqueItems = append(uniqueItems, item)
+			}
+		}
+	}
+
+	// replace the items in the feed with the unique items
+	feed.Items = uniqueItems
+}
+
+func (r *Reaper) updateFeedAndSaveNewItemsToDb(fh *FeedHolder) {
+	f := fh.Feed
+
+	originalItemsMap := make(map[string]*gofeed.Item)
+	for _, item := range f.Items {
+		originalItemsMap[item.Link] = item
+	}
 
 	fp := gofeed.NewParser()
 	newF, err := fp.ParseURL(f.FeedLink)
@@ -90,22 +123,17 @@ func (r *Reaper) updateFeedAndSaveNewItemsToDb(f *gofeed.Feed) {
 	if err != nil {
 		r.handleFeedFetchFailure(f.FeedLink, err)
 		return
-	} else {
-		newF.FeedLink = f.FeedLink // sometimes this gets overwritten for some reason
-		r.feeds[newF.FeedLink].Feed = newF
-		r.feeds[newF.FeedLink].LastFetched = time.Now()
 	}
+
+	sanitizeFeedItems(newF)
+
+	newF.FeedLink = f.FeedLink // sometimes this gets overwritten for some reason
+	r.feeds[newF.FeedLink].LastFetched = time.Now()
+	r.feeds[newF.FeedLink].Feed = newF
 
 	newItems := []*gofeed.Item{}
 	for _, item := range newF.Items {
-		isNew := true
-		for _, originalItem := range originalListOfItems {
-			if item.Link == originalItem.Link {
-				isNew = false
-				break
-			}
-		}
-		if isNew {
+		if _, exists := originalItemsMap[item.Link]; !exists {
 			newItems = append(newItems, item)
 		}
 	}
@@ -122,22 +150,25 @@ func (r *Reaper) updateFeedAndSaveNewItemsToDb(f *gofeed.Feed) {
 			}
 		}
 	}
+
+	fh.LastFetched = time.Now()
 }
 
 // UpdateAll fetches every feed & attempts updating them
 // asynchronously, then prints the duration of the sync
 func (r *Reaper) refreshAllFeeds() {
 	start := time.Now()
-
 	semaphore := make(chan struct{}, 20)
 
-	for i := range r.feeds {
-		if r.feeds[i].LastFetched.Add(timeToBecomeStale).Before(time.Now()) {
+	for feedLink := range r.feeds {
+		// if the feed is stale, update it
+		if r.feeds[feedLink].LastFetched.Add(timeToBecomeStale).Before(start) {
 			semaphore <- struct{}{} // acquire a token
+
 			go func(feedHolder *FeedHolder) {
 				defer func() { <-semaphore }() // release the token when done
-				r.updateFeedAndSaveNewItemsToDb(feedHolder.Feed)
-			}(r.feeds[i])
+				r.updateFeedAndSaveNewItemsToDb(feedHolder)
+			}(r.feeds[feedLink])
 		}
 	}
 
@@ -222,6 +253,8 @@ func (r *Reaper) Fetch(url string) error {
 	if err != nil {
 		return err
 	}
+
+	sanitizeFeedItems(feed)
 
 	r.feeds[url] = &FeedHolder{
 		Feed:        feed,
