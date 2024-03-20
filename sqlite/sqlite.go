@@ -367,8 +367,10 @@ func (db *DB) SavePost(feedUrl string, title string, url string, publishedDateti
 	feedId := db.GetFeedID(feedUrl)
 
 	lock()
-	_, err := db.sql.Exec("INSERT INTO post (feed_id, title, url, published_at) VALUES (?, ?, ?, ?) ON CONFLICT(url) DO NOTHING",
-		feedId, title, url, publishedDatetime)
+	_, err := db.sql.Exec(
+		"INSERT INTO post (feed_id, title, url, published_at) VALUES (?, ?, ?, ?) ON CONFLICT(feed_id, url) DO NOTHING",
+		feedId, title, url, publishedDatetime,
+	)
 	unlock()
 
 	if err != nil {
