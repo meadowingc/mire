@@ -390,7 +390,12 @@ func (db *DB) GetPostId(postUrl string) int {
 }
 
 func (db *DB) GetLatestPosts(limit int) []*Post {
-	rows, err := db.sql.Query("SELECT title, url, published_at FROM post ORDER BY published_at DESC LIMIT ?", limit)
+	rows, err := db.sql.Query(`
+        SELECT title, url, MAX(published_at) as published_at
+        FROM post
+        GROUP BY url
+        ORDER BY published_at DESC
+        LIMIT ?`, limit)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -399,10 +404,22 @@ func (db *DB) GetLatestPosts(limit int) []*Post {
 	var posts []*Post
 	for rows.Next() {
 		var p Post
-		err = rows.Scan(&p.Title, &p.URL, &p.PublishedDatetime)
+		var publishedTime string
+		err = rows.Scan(&p.Title, &p.URL, &publishedTime)
 		if err != nil {
 			log.Fatal(err)
 		}
+
+		layout := time.RFC3339
+		if !strings.Contains(publishedTime, "T") {
+			layout = "2006-01-02 15:04:05-07:00"
+		}
+
+		p.PublishedDatetime, err = time.Parse(layout, publishedTime)
+		if err != nil {
+			log.Fatal(err)
+		}
+
 		posts = append(posts, &p)
 	}
 	return posts
