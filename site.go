@@ -80,7 +80,7 @@ func (s *Site) aboutHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Site) globalHandler(w http.ResponseWriter, r *http.Request) {
-	items := s.db.GetLatestPosts(50)
+	items := s.db.GetLatestPosts(100)
 
 	s.renderPage(w, r, "global", items)
 }
