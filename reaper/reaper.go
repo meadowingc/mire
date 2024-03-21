@@ -114,7 +114,13 @@ func sanitizeFeedItems(feed *gofeed.Feed) {
 			seen[item.Link] = true
 
 			if item.Link != "" {
-				uniqueItems = append(uniqueItems, item)
+				// we don't really need to keep the whole item
+				uniqueItems = append(uniqueItems, &gofeed.Item{
+					Title:           item.Title,
+					Link:            item.Link,
+					Published:       item.Published,
+					PublishedParsed: item.PublishedParsed,
+				})
 			}
 		}
 	}
@@ -222,27 +228,6 @@ func (r *Reaper) HasFeed(url string) bool {
 
 func (r *Reaper) GetFeed(url string) *gofeed.Feed {
 	return r.feeds[url].Feed
-}
-
-// GetUserFeeds returns a list of feeds
-func (r *Reaper) GetUserFeeds(username string) []*sqlite.FeedUrlWithError {
-	urlsAndErrors := r.db.GetUserFeedURLsWithFetchErrors(username)
-	var result []*sqlite.FeedUrlWithError
-	for _, u := range urlsAndErrors {
-		// feeds in the db are guaranteed to be in reaper
-		if !r.HasFeed(u.URL) {
-			log.Printf("[err] reaper: feed '%s' not found in reaper\n", u)
-			continue
-		}
-
-		result = append(result, &u)
-	}
-
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].URL < result[j].URL
-	})
-
-	return result
 }
 
 func (r *Reaper) GetAllFeeds() []*gofeed.Feed {
