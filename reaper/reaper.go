@@ -35,7 +35,11 @@ type Reaper struct {
 	db *sqlite.DB
 }
 
+var mutex = make(chan struct{}, 1)
+
 func New(db *sqlite.DB) *Reaper {
+	mutex <- struct{}{}
+
 	r := &Reaper{
 		feeds:        make(map[string]*FeedHolder),
 		saverChannel: make(chan *PostSaveRequest),
@@ -48,12 +52,21 @@ func New(db *sqlite.DB) *Reaper {
 	return r
 }
 
+func lock() {
+	<-mutex
+}
+
+func unlock() {
+	mutex <- struct{}{}
+}
+
 // Start initializes the reaper by populating a list of feeds from the database
 // and periodically refreshes all feeds every hour, if the feeds are stale.
 // reaper should only ever be started once (in New)
 func (r *Reaper) start() {
 	urls := r.db.GetAllFeedURLs()
 
+	lock()
 	for _, url := range urls {
 		// Setting FeedLink lets us defer fetching
 		feed := &gofeed.Feed{
@@ -65,6 +78,7 @@ func (r *Reaper) start() {
 			LastFetched: time.Now().Add(-timeToBecomeStale), // force refresh
 		}
 	}
+	unlock()
 
 	for {
 		r.refreshAllFeeds()
@@ -128,8 +142,11 @@ func (r *Reaper) updateFeedAndSaveNewItemsToDb(fh *FeedHolder) {
 	sanitizeFeedItems(newF)
 
 	newF.FeedLink = f.FeedLink // sometimes this gets overwritten for some reason
+
+	lock()
 	r.feeds[newF.FeedLink].LastFetched = time.Now()
 	r.feeds[newF.FeedLink].Feed = newF
+	unlock()
 
 	newItems := []*gofeed.Item{}
 	for _, item := range newF.Items {
@@ -255,10 +272,23 @@ func (r *Reaper) AddFeedStub(url string) {
 		return
 	}
 
+	lock()
 	r.feeds[url] = &FeedHolder{
 		Feed:        &gofeed.Feed{FeedLink: url},
 		LastFetched: time.Now().Add(-timeToBecomeStale), // force refresh
 	}
+	unlock()
+}
+
+func (r *Reaper) RemoveFeed(url string) {
+	if !r.HasFeed(url) {
+		log.Printf("[err] reaper: tried to remove non-existent feed '%s'\n", url)
+		return
+	}
+
+	lock()
+	delete(r.feeds, url)
+	unlock()
 }
 
 // Fetch attempts to fetch a feed from a given url, marshal
@@ -272,10 +302,12 @@ func (r *Reaper) Fetch(url string) error {
 
 	sanitizeFeedItems(feed)
 
+	lock()
 	r.feeds[url] = &FeedHolder{
 		Feed:        feed,
 		LastFetched: time.Now(),
 	}
+	unlock()
 
 	return nil
 }

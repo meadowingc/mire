@@ -291,7 +291,10 @@ func (s *Site) settingsSubmitHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.db.DeleteOrphanedPostReads(s.username(r))
-	s.db.DeleteOrphanFeeds()
+	orphanedFeeds := s.db.DeleteOrphanFeeds()
+	for _, feedUrl := range orphanedFeeds {
+		s.reaper.RemoveFeed(feedUrl)
+	}
 
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }

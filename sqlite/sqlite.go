@@ -278,13 +278,31 @@ func (db *DB) DeleteOrphanedPostReads(username string) {
 
 // DeleteOrphanFeeds deletes all feeds that are not subscribed to by any user,
 // as well as all posts that belong to those feeds.
-func (db *DB) DeleteOrphanFeeds() {
+func (db *DB) DeleteOrphanFeeds() []string {
 	lock()
 	defer unlock()
 
+	// Select the URLs of the orphan feeds (feeds that are not subscribed to by any user)
+	rows, err := db.sql.Query(`
+        SELECT url FROM feed
+        WHERE id NOT IN (SELECT feed_id FROM subscribe)`)
+	if err != nil {
+		return []string{}
+	}
+	defer rows.Close()
+
+	var orphanFeedUrls []string
+	for rows.Next() {
+		var url string
+		if err := rows.Scan(&url); err != nil {
+			return orphanFeedUrls
+		}
+		orphanFeedUrls = append(orphanFeedUrls, url)
+	}
+
 	// Delete posts that belong to the orphan feeds (feeds that are not
 	// subscribed to by any user)
-	_, err := db.sql.Exec(`
+	_, err = db.sql.Exec(`
 		DELETE FROM post
 		WHERE feed_id NOT IN (SELECT feed_id FROM subscribe)`)
 	if err != nil {
@@ -298,6 +316,8 @@ func (db *DB) DeleteOrphanFeeds() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	return orphanFeedUrls
 }
 
 func (db *DB) GetUserID(username string) int {
