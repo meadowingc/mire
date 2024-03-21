@@ -282,7 +282,8 @@ func (db *DB) DeleteOrphanFeeds() {
 	lock()
 	defer unlock()
 
-	// Delete posts that belong to the orphan feeds
+	// Delete posts that belong to the orphan feeds (feeds that are not
+	// subscribed to by any user)
 	_, err := db.sql.Exec(`
 		DELETE FROM post
 		WHERE feed_id NOT IN (SELECT feed_id FROM subscribe)`)
@@ -290,7 +291,7 @@ func (db *DB) DeleteOrphanFeeds() {
 		log.Fatal(err)
 	}
 
-	// Delete the orphan feeds
+	// Delete the orphan feeds (feeds that are not subscribed to by any user)
 	_, err = db.sql.Exec(`
 		DELETE FROM feed
 		WHERE id NOT IN (SELECT feed_id FROM subscribe)`)
