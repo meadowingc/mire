@@ -265,6 +265,7 @@ func (s *Site) settingsSubmitHandler(w http.ResponseWriter, r *http.Request) {
 			err := s.reaper.Fetch(u)
 			if err != nil {
 				fmt.Printf("reaper: can't fetch '%s' %s\n", u, err)
+				s.db.SetFeedFetchError(u, err.Error())
 				return
 			}
 

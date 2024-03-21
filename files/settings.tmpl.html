@@ -11,7 +11,7 @@
 <form method="POST" action="/settings/submit">
 <textarea name="submit" rows="10" cols="50">
 {{ range .Data -}}
-{{ .FeedLink }}
+{{ .URL }}
 {{ end -}}
 </textarea>
 <br>
@@ -54,7 +54,8 @@ https://www.visakanv.com/feed/
 {{ end }}
 <p>
 {{ range .Data -}}
-<a href="/feeds/{{ .FeedLink | escapeURL }}">{{ .FeedLink }}</a>
+{{- $hasError := ne .Error "" -}}
+<a href="/feeds/{{ .URL | escapeURL }}">{{ .URL }}</a> {{ if $hasError }}<span title="{{ .Error }}" style="cursor: pointer;">⚠️</span>{{ end }}
 {{ end -}}
 </p>
 </main>

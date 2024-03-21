@@ -139,6 +139,12 @@ func (r *Reaper) updateFeedAndSaveNewItemsToDb(fh *FeedHolder) {
 		return
 	}
 
+	// otherwise tell the DB that we successfully fetched the feed
+	err = r.db.SetFeedFetchError(f.FeedLink, "")
+	if err != nil {
+		log.Printf("[err] reaper: could not clear feed fetch error '%s'\n", err)
+	}
+
 	sanitizeFeedItems(newF)
 
 	newF.FeedLink = f.FeedLink // sometimes this gets overwritten for some reason
@@ -219,20 +225,23 @@ func (r *Reaper) GetFeed(url string) *gofeed.Feed {
 }
 
 // GetUserFeeds returns a list of feeds
-func (r *Reaper) GetUserFeeds(username string) []*gofeed.Feed {
-	urls := r.db.GetUserFeedURLs(username)
-	var result []*gofeed.Feed
-	for _, u := range urls {
+func (r *Reaper) GetUserFeeds(username string) []*sqlite.FeedUrlWithError {
+	urlsAndErrors := r.db.GetUserFeedURLsWithFetchErrors(username)
+	var result []*sqlite.FeedUrlWithError
+	for _, u := range urlsAndErrors {
 		// feeds in the db are guaranteed to be in reaper
-		if !r.HasFeed(u) {
+		if !r.HasFeed(u.URL) {
 			log.Printf("[err] reaper: feed '%s' not found in reaper\n", u)
 			continue
 		}
 
-		result = append(result, r.feeds[u].Feed)
+		result = append(result, &u)
 	}
 
-	r.SortFeeds(result)
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].URL < result[j].URL
+	})
+
 	return result
 }
 
