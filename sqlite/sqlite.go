@@ -254,6 +254,44 @@ func (db *DB) GetUserFeedURLs(username string) []string {
 	return urls
 }
 
+type FeedUrlWithError struct {
+	URL   string
+	Error string
+}
+
+func (db *DB) GetUserFeedURLsWithFetchErrors(username string) []FeedUrlWithError {
+	uid := db.GetUserID(username)
+
+	rows, err := db.sql.Query(`
+		SELECT f.url, f.fetch_error
+		FROM feed f
+		JOIN subscribe s ON f.id = s.feed_id
+		JOIN user u ON s.user_id = u.id
+		WHERE u.id = ?`, uid)
+	if err == sql.ErrNoRows {
+		return []FeedUrlWithError{}
+	}
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+
+	var feedErrors []FeedUrlWithError
+	for rows.Next() {
+		var feedError FeedUrlWithError
+		var fetchError sql.NullString
+		err = rows.Scan(&feedError.URL, &fetchError)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if fetchError.Valid {
+			feedError.Error = fetchError.String
+		}
+		feedErrors = append(feedErrors, feedError)
+	}
+	return feedErrors
+}
+
 // DeleteOrphanedPostReads deletes all post_read entries for a given user if
 // that user is not subscribed to the feed that the post belongs to.
 func (db *DB) DeleteOrphanedPostReads(username string) {
