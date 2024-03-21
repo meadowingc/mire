@@ -206,8 +206,13 @@ func (s *Site) settingsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	feeds := s.reaper.GetUserFeeds(s.username(r))
-	s.renderPage(w, r, "settings", feeds)
+	urlsAndErrors := s.db.GetUserFeedURLsWithFetchErrors(s.username(r))
+
+	sort.Slice(urlsAndErrors, func(i, j int) bool {
+		return urlsAndErrors[i].URL < urlsAndErrors[j].URL
+	})
+
+	s.renderPage(w, r, "settings", urlsAndErrors)
 }
 
 // TODO:
