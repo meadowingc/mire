@@ -258,6 +258,9 @@ func (s *Site) settingsSubmitHandler(w http.ResponseWriter, r *http.Request) {
 			// save feed to dabase
 			s.db.WriteFeed(u)
 
+			// add empty feed entry to reaper
+			s.reaper.AddFeedStub(u)
+
 			// try to get posts and save them
 			err := s.reaper.Fetch(u)
 			if err != nil {

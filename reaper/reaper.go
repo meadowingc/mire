@@ -203,11 +203,15 @@ func (r *Reaper) GetFeed(url string) *gofeed.Feed {
 
 // GetUserFeeds returns a list of feeds
 func (r *Reaper) GetUserFeeds(username string) []*gofeed.Feed {
-	log.Printf("Getting feeds for user %s\n", username)
 	urls := r.db.GetUserFeedURLs(username)
 	var result []*gofeed.Feed
 	for _, u := range urls {
 		// feeds in the db are guaranteed to be in reaper
+		if !r.HasFeed(u) {
+			log.Printf("[err] reaper: feed '%s' not found in reaper\n", u)
+			continue
+		}
+
 		result = append(result, r.feeds[u].Feed)
 	}
 
@@ -244,6 +248,17 @@ func (r *Reaper) SortItemsByDate(posts []*gofeed.Item) []*gofeed.Item {
 		return posts[i].PublishedParsed.After(*posts[j].PublishedParsed)
 	})
 	return posts
+}
+
+func (r *Reaper) AddFeedStub(url string) {
+	if r.HasFeed(url) {
+		return
+	}
+
+	r.feeds[url] = &FeedHolder{
+		Feed:        &gofeed.Feed{FeedLink: url},
+		LastFetched: time.Now().Add(-timeToBecomeStale), // force refresh
+	}
 }
 
 // Fetch attempts to fetch a feed from a given url, marshal
