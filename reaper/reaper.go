@@ -203,6 +203,7 @@ func (r *Reaper) GetFeed(url string) *gofeed.Feed {
 
 // GetUserFeeds returns a list of feeds
 func (r *Reaper) GetUserFeeds(username string) []*gofeed.Feed {
+	log.Printf("Getting feeds for user %s\n", username)
 	urls := r.db.GetUserFeedURLs(username)
 	var result []*gofeed.Feed
 	for _, u := range urls {
