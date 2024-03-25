@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"codeberg.org/meadowingc/mire/sqlite"
@@ -131,7 +132,6 @@ func sanitizeFeedItems(feed *gofeed.Feed) {
 
 func (r *Reaper) updateFeedAndSaveNewItemsToDb(fh *FeedHolder) {
 	f := fh.Feed
-	log.Printf("[info:reaper.updateFeedAndSaveNewItemsToDb] Starting update for %s\n", f.FeedLink)
 
 	originalItemsMap := make(map[string]*gofeed.Item)
 	for _, item := range f.Items {
@@ -197,23 +197,25 @@ func (r *Reaper) updateFeedAndSaveNewItemsToDb(fh *FeedHolder) {
 func (r *Reaper) refreshAllFeeds() {
 	start := time.Now()
 	semaphore := make(chan struct{}, 20)
+	var wg sync.WaitGroup
 
 	for feedLink := range r.feeds {
 		// if the feed is stale, update it
 		if r.feeds[feedLink].LastFetched.Add(timeToBecomeStale).Before(start) {
 			semaphore <- struct{}{} // acquire a token
+			wg.Add(1)               // increment the WaitGroup counter
 
 			go func(feedHolder *FeedHolder) {
-				defer func() { <-semaphore }() // release the token when done
+				defer func() {
+					<-semaphore // release the token when done
+					wg.Done()   // decrement the WaitGroup counter
+				}()
 				r.updateFeedAndSaveNewItemsToDb(feedHolder)
 			}(r.feeds[feedLink])
 		}
 	}
 
-	// wait for all goroutines to finish
-	for i := 0; i < cap(semaphore); i++ {
-		semaphore <- struct{}{}
-	}
+	wg.Wait() // wait for all goroutines to finish
 
 	log.Printf("reaper: refresh complete in %s\n", time.Since(start))
 }

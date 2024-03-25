@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"codeberg.org/meadowingc/mire/lib"
@@ -249,11 +250,16 @@ func (s *Site) settingsSubmitHandler(w http.ResponseWriter, r *http.Request) {
 
 	// write to reaper + db
 	semaphore := make(chan struct{}, 20)
+	var wg sync.WaitGroup
 
 	for _, u := range validatedURLs {
 		semaphore <- struct{}{} // acquire a token
+		wg.Add(1)               // increment the WaitGroup counter
 		go func(u string) {
-			defer func() { <-semaphore }() // release the token when done
+			defer func() {
+				<-semaphore // release the token when done
+				wg.Done()   // decrement the WaitGroup counter
+			}()
 
 			// if it's in reaper, it's in the db, safe to skip
 			if s.reaper.HasFeed(u) {
@@ -285,10 +291,7 @@ func (s *Site) settingsSubmitHandler(w http.ResponseWriter, r *http.Request) {
 		}(u)
 	}
 
-	// wait for all goroutines to finish
-	for i := 0; i < cap(semaphore); i++ {
-		semaphore <- struct{}{}
-	}
+	wg.Wait() // wait for all goroutines to finish
 
 	// subscribe to all listed feeds exclusively
 	s.db.UnsubscribeAll(s.username(r))
