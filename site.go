@@ -134,18 +134,14 @@ func (s *Site) registerHandler(w http.ResponseWriter, r *http.Request) {
 
 func (s *Site) userHandler(w http.ResponseWriter, r *http.Request) {
 	username := r.PathValue("username")
+	isUserRequestingOwnPage := s.username(r) == username
 
 	if !s.db.UserExists(username) {
 		http.NotFound(w, r)
 		return
 	}
 
-	// only get read status if the user is logged in and requesting their own
-	// page
-	isUserRequestingOwnPage := s.username(r) == username
-	shouldGetReadStatus := isUserRequestingOwnPage
-
-	items := s.db.GetPostsForUser(username, 150, shouldGetReadStatus)
+	items := s.db.GetPostsForUser(username, 150)
 
 	// get the N oldest unread items
 	oldestItems := make([]*sqlite.UserPostEntry, len(items))
