@@ -437,14 +437,26 @@ func (db *DB) SavePost(feedUrl string, title string, url string, publishedDateti
 	}
 }
 
-func (db *DB) GetPostId(postUrl string) int {
+func (db *DB) GetPostId(postUrl, username string) int {
+	var uid = db.GetUserID(username)
 	var pid int
 
-	err := db.sql.QueryRow("SELECT id FROM post WHERE url=?", postUrl).Scan(&pid)
+	// Try to get the post ID from the feeds the user is subscribed to
+	err := db.sql.QueryRow(`
+		SELECT p.id FROM post p
+		JOIN feed f ON p.feed_id = f.id
+		JOIN subscribe s ON f.id = s.feed_id
+		WHERE p.url = ? AND s.user_id = ?`, postUrl, uid).Scan(&pid)
+
+	if err == sql.ErrNoRows {
+		// If no such post is found, get the ID of the first post with the given URL from the database
+		err = db.sql.QueryRow("SELECT id FROM post WHERE url=?", postUrl).Scan(&pid)
+	}
 
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	return pid
 }
 
@@ -505,42 +517,40 @@ func (db *DB) GetPostsForFeed(feedUrl string) []*Post {
 	return posts
 }
 
-func (db *DB) GetPostsForUser(username string, limit int, includeReadStatus bool) []*UserPostEntry {
+func (db *DB) GetPostsForUser(username string, limit int) []*UserPostEntry {
 	uid := db.GetUserID(username)
 
 	rows, err := db.sql.Query(`
-		SELECT p.title, p.url, p.published_at
-		FROM post p
-		JOIN feed f ON p.feed_id = f.id
-		JOIN subscribe s ON f.id = s.feed_id
-		JOIN user u ON s.user_id = u.id
-		WHERE u.id = ?
-		ORDER BY p.published_at DESC
-		LIMIT ?`, uid, limit)
+        SELECT p.title, p.url, p.published_at, pr.has_read
+        FROM post p
+        JOIN feed f ON p.feed_id = f.id
+        JOIN subscribe s ON f.id = s.feed_id
+        JOIN user u ON s.user_id = u.id
+        LEFT JOIN post_read pr ON p.id = pr.post_id AND u.id = pr.user_id
+        WHERE u.id = ?
+        ORDER BY p.published_at DESC
+        LIMIT ?`, uid, limit)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	var posts []*gofeed.Item
+	var userPostsEntries []*UserPostEntry
 	for rows.Next() {
+		var entry UserPostEntry
 		var p gofeed.Item
-		err = rows.Scan(&p.Title, &p.Link, &p.PublishedParsed)
+		var hasRead sql.NullBool
+		err = rows.Scan(&p.Title, &p.Link, &p.PublishedParsed, &hasRead)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		posts = append(posts, &p)
+		entry.Post = &p
+		entry.IsRead = hasRead.Valid && hasRead.Bool // IsRead is true if hasRead is not NULL and is true
+
+		userPostsEntries = append(userPostsEntries, &entry)
 	}
 
 	rows.Close()
-
-	var userPostsEntries []*UserPostEntry = make([]*UserPostEntry, len(posts))
-	for i, p := range posts {
-		userPostsEntries[i] = &UserPostEntry{Post: p}
-		if includeReadStatus {
-			userPostsEntries[i].IsRead = db.GetReadStatus(username, p.Link)
-		}
-	}
 
 	return userPostsEntries
 }
@@ -566,7 +576,7 @@ func (db *DB) GetRandomPost() *Post {
 
 func (db *DB) SetReadStatus(username string, postUrl string, read bool) {
 	userId := db.GetUserID(username)
-	postId := db.GetPostId(postUrl)
+	postId := db.GetPostId(postUrl, username)
 
 	var exists bool
 	err := db.sql.QueryRow("SELECT 1 FROM post_read WHERE user_id=? AND post_id=?", userId, postId).Scan(&exists)
@@ -591,7 +601,7 @@ func (db *DB) SetReadStatus(username string, postUrl string, read bool) {
 
 func (db *DB) ToggleReadStatus(username string, postUrl string) {
 	userId := db.GetUserID(username)
-	postId := db.GetPostId(postUrl)
+	postId := db.GetPostId(postUrl, username)
 
 	var read bool
 
@@ -606,7 +616,7 @@ func (db *DB) ToggleReadStatus(username string, postUrl string) {
 
 func (db *DB) GetReadStatus(username string, postUrl string) bool {
 	userId := db.GetUserID(username)
-	postId := db.GetPostId(postUrl)
+	postId := db.GetPostId(postUrl, username)
 
 	var read bool
 

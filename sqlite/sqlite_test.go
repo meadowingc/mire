@@ -42,7 +42,7 @@ func TestPostsOps(t *testing.T) {
 	db.AddUser("testuser", "testpass")
 	db.Subscribe("testuser", testFeedUrl)
 
-	posts := db.GetPostsForUser("testuser", 100, true)
+	posts := db.GetPostsForUser("testuser", 100)
 	if len(posts) != 2 {
 		t.Errorf("Expected 2 posts, got %d", len(posts))
 	}
