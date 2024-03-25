@@ -131,6 +131,7 @@ func sanitizeFeedItems(feed *gofeed.Feed) {
 
 func (r *Reaper) updateFeedAndSaveNewItemsToDb(fh *FeedHolder) {
 	f := fh.Feed
+	log.Printf("[info:reaper.updateFeedAndSaveNewItemsToDb] Starting update for %s\n", f.FeedLink)
 
 	originalItemsMap := make(map[string]*gofeed.Item)
 	for _, item := range f.Items {
@@ -154,6 +155,14 @@ func (r *Reaper) updateFeedAndSaveNewItemsToDb(fh *FeedHolder) {
 	sanitizeFeedItems(newF)
 
 	newF.FeedLink = f.FeedLink // sometimes this gets overwritten for some reason
+
+	if !r.HasFeed(newF.FeedLink) {
+		// NOTE: this should never happen, but if it does, we should add the
+		// feed to the reaper so that we can track it
+		log.Printf("[err] reaper: feed not tracked by reaper but fetched '%s'\n", newF.FeedLink)
+		log.Printf("[err. cont] reaper: adding feed '%s' to reaper\n", newF.FeedLink)
+		r.AddFeedStub(newF.FeedLink)
+	}
 
 	lock()
 	r.feeds[newF.FeedLink].LastFetched = time.Now()
