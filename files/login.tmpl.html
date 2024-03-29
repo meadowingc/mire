@@ -1,7 +1,7 @@
 {{ define "login" }}
 {{ template "head" . }}
 {{ template "nav" . }}
-<p>login:
+<p>login:</p>
 <form method="POST" action="/login">
 	<label for="username">username:</label>
 	<input type="text" name="username" required>
@@ -11,7 +11,11 @@
 	<br>
 	<input type="submit" value="login">
 </form>
-<p>register:
+<br/>
+<hr/>
+<br/>
+<p>register:</p>
+<p><small>We have no password requirements but PLEASE use a safe password, hopefully one you don't use on other sites. The best would be to use a password generator.</small></p>
 <form method="POST" action="/register">
 	<label for="username">username:</label>
 	<input type="text" name="username" required>
@@ -21,5 +25,7 @@
 	<br>
 	<input type="submit" value="register">
 </form>
+<br/>
+<br/>
 {{ template "tail" . }}
 {{ end }}
