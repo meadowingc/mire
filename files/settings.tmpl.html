@@ -2,25 +2,26 @@
 {{ template "head" . }}
 {{ template "nav" . }}
 <main class="content-page">
-<h3>Settings</h3>
-<p>your public url: <a href="/u/{{ .Username }}">mire.meadowing.club/u/{{ .Username }}</a></p>
-<p>you can view your (public) blogroll here: <a href="/u/{{ .Username }}/blogroll">mire.meadowing.club/u/{{ .Username }}/blogroll</a></p>
+  <h3>Settings</h3>
+  <p>your public url: <a href="/u/{{ .Username }}">mire.meadowing.club/u/{{ .Username }}</a></p>
+  <p>you can view your (public) blogroll here: <a href="/u/{{ .Username }}/blogroll">mire.meadowing.club/u/{{ .Username
+      }}/blogroll</a></p>
 
-<p>{{ len .Data }} subscriptions:</p>
+  <p>{{ len .Data }} subscriptions:</p>
 
-<form method="POST" action="/settings/submit">
-<textarea name="submit" rows="10" cols="50">
+  <form method="POST" action="/settings/submit">
+    <textarea name="submit" rows="10" cols="50">
 {{ range .Data -}}
 {{ .URL }}
 {{ end -}}
 </textarea>
-<br>
-<input type="submit" value="subscribe">
-</form>
-{{ $length := len .Data }}
-{{ if eq $length 0 }}
-<p>
-      ‼️ tutorial ‼️
+    <br>
+    <input type="submit" value="subscribe">
+  </form>
+  {{ $length := len .Data }}
+  {{ if eq $length 0 }}
+  <pre>
+‼️ tutorial ‼️
 
 once you have subscribed to some feeds,
 their posts will appear on your timeline.
@@ -45,19 +46,20 @@ https://tiramisu.bearblog.dev/feed/
 https://www.visakanv.com/feed/
 
 
-  /)/)
+/)/)
 ( . .)
 ( づ♡
-</p>
-{{ else if gt $length 0 }}
-<p>feed details</p>
-{{ end }}
-<p>
+  </pre>
+  {{ else if gt $length 0 }}
+  <p>feed details</p>
+  {{ end }}
+  <pre>
 {{ range .Data -}}
 {{- $hasError := ne .Error "" -}}
-<a href="/feeds/{{ .URL | escapeURL }}">{{ .URL }}</a> {{ if $hasError }}<span title="{{ .Error }}" style="cursor: pointer;">⚠️</span>{{ end }}
+<a href="/feeds/{{ .URL | escapeURL }}">{{ .URL }}</a> {{ if $hasError }}<span title="{{ .Error }}"
+  style="cursor: pointer;">⚠️</span>{{ end }}
 {{ end -}}
-</p>
+  </pre>
 </main>
 {{ template "tail" . }}
 {{ end }}

@@ -1,26 +1,27 @@
 {{define "cookieBanner"}}
-<div id="cookie-banner" style="display: none; position: fixed; bottom: 0; left:0; width: 100%; background-color: #f9ed69; padding: 20px 0; text-align: center;">
-<p style="margin: 0; padding: 0; color: black;">
-This website uses cookies for basic functionality (track your session so the platform knows who you are). 
-<br/>
-If you continue to use this site, you agree to the use of cookies, otherwise you should leave the site.
-</p>
+<div id="cookie-banner"
+    style="display: none; position: fixed; bottom: 0; left:0; width: 100%; background-color: #f9ed69; padding: 20px 0; text-align: center;">
+    <p style="margin: 0; padding: 0; color: black;">
+        This website uses cookies for basic functionality (track your session so the platform knows who you are).
+        <br />
+        If you continue to use this site, you agree to the use of cookies, otherwise you should leave the site.
+    </p>
 
-<div style="margin-top: 10px;">
-<button id="accept-cookies" style="margin-right: 15px; padding: 10px;">Accept</button>
-<button onclick="rejectCookies();" style="padding: 10px;">I don't want your cookies!</button>
-</div>
+    <div style="margin-top: 10px;">
+        <button id="accept-cookies" style="margin-right: 15px; padding: 10px;">Accept</button>
+        <button onclick="rejectCookies();" style="padding: 10px;">I don't want your cookies!</button>
+    </div>
 
 </div>
 
 <script>
-    window.onload = function() {
+    window.onload = function () {
         var acceptedCookies = localStorage.getItem('acceptedCookies');
         if (!acceptedCookies) {
             document.getElementById('cookie-banner').style.display = 'block';
         }
 
-        document.getElementById('accept-cookies').onclick = function() {
+        document.getElementById('accept-cookies').onclick = function () {
             localStorage.setItem('acceptedCookies', 'true');
             document.getElementById('cookie-banner').style.display = 'none';
         }

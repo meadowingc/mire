@@ -469,6 +469,8 @@ func (s *Site) renderPage(w http.ResponseWriter, r *http.Request, page string, d
 		s.renderErr(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	w.Header().Set("Content-Type", http.DetectContentType([]byte(page)))
 }
 
 // printDomain does a best-effort uri parse and
