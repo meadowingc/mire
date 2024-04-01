@@ -3,9 +3,17 @@ package main
 import (
 	"log"
 	"net/http"
+
+	"codeberg.org/meadowingc/mire/constants"
 )
 
 func main() {
+	if constants.DEBUG_MODE {
+		log.Println("main: running in debug mode")
+	} else {
+		log.Println("main: running in release mode")
+	}
+
 	s := New()
 
 	http.HandleFunc("GET /{$}", s.indexHandler)

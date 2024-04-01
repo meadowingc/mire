@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"codeberg.org/meadowingc/mire/constants"
 	"codeberg.org/meadowingc/mire/lib"
 	"codeberg.org/meadowingc/mire/reaper"
 	"codeberg.org/meadowingc/mire/sqlite"
@@ -451,15 +452,17 @@ func (s *Site) renderPage(w http.ResponseWriter, r *http.Request, page string, d
 		Data:       data,
 	}
 
-	// funcMap := template.FuncMap{
-	// 	"printDomain": s.printDomain,
-	// 	"timeSince":   s.timeSince,
-	// 	"trimSpace":   strings.TrimSpace,
-	// 	"escapeURL":   url.QueryEscape,
-	// }
+	if constants.DEBUG_MODE {
+		funcMap := template.FuncMap{
+			"printDomain": s.printDomain,
+			"timeSince":   s.timeSince,
+			"trimSpace":   strings.TrimSpace,
+			"escapeURL":   url.QueryEscape,
+		}
 
-	// tmplFiles := filepath.Join("files", "*.tmpl.html")
-	// templates = template.Must(template.New("whatever").Funcs(funcMap).ParseGlob(tmplFiles))
+		tmplFiles := filepath.Join("files", "*.tmpl.html")
+		templates = template.Must(template.New("whatever").Funcs(funcMap).ParseGlob(tmplFiles))
+	}
 
 	err := templates.ExecuteTemplate(w, page, pageData)
 	if err != nil {
