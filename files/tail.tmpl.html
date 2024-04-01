@@ -2,5 +2,16 @@
 <footer>
 	<p class="puny"><i>{{ .CutePhrase }}</i>
 </footer>
+
+</body>
+
+<script>
+	if ('serviceWorker' in navigator) {
+		navigator.serviceWorker.register("/static/serviceworker.js");
+	}
+</script>
+
 {{template "cookieBanner" .}}
+
+</html>
 {{ end }}

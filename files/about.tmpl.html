@@ -3,44 +3,61 @@
 {{ template "nav" . }}
 
 <main class="content-page">
-<h3>about</h3>
+    <h3>about</h3>
 
-<p>
-This is a fork of the excelent <a target="_blank" href="https://vore.website/">vore.website</a> (<a target="_blank" href="https://github.com/biox/vore">source</a>) RSS feed reader. You can find the source code for <i>Mire</i> on <a target="_blank" href="https://codeberg.org/meadowingc/mire">Codeberg</a>. Any contributions are welcome!
-</p>
+    <p>
+        This is a fork of the excelent <a target="_blank" href="https://vore.website/">vore.website</a> (<a
+            target="_blank" href="https://github.com/biox/vore">source</a>) RSS feed reader. You can find the source
+        code for <i>Mire</i> on <a target="_blank" href="https://codeberg.org/meadowingc/mire">Codeberg</a>. Any
+        contributions are welcome!
+    </p>
 
-<p>
-<i>Mire</i> aims to be a minimalistic RSS reader in the same vein as vore, but with slightly more features. I originally created the fork because I wanted something exactly like vore but with the ability to know if I had already read an article, as well as maybe also having the ability to get notifications when new articles are posted. I opted for forking the project instead of contributing the changes back to the main project because I saw it was part of <a target="_blank" href="https://github.com/biox/vore/blob/main/readme">vore's design</a> not to have these features in the first place.
-</p>
+    <p>
+        <i>Mire</i> aims to be a minimalistic RSS reader in the same vein as vore, but with slightly more features. I
+        originally created the fork because I wanted something exactly like vore but with the ability to know if I had
+        already read an article, as well as maybe also having the ability to get notifications when new articles are
+        posted. I opted for forking the project instead of contributing the changes back to the main project because I
+        saw it was part of <a target="_blank" href="https://github.com/biox/vore/blob/main/readme">vore's design</a> not
+        to have these features in the first place.
+    </p>
 
-<p>
-<i>Mire</i> is mainly maintained by me, <a target="_blank" href="https://meadow.bearblog.dev/">meadow</a>. If you want to get in contact with me then you can send me an email at <code>`meadowingc 🦆 proton 🔮 me`</code>.
-</p>
-<br/>
-<br/>
+    <p>
+        <i>Mire</i> is mainly maintained by me, <a target="_blank" href="https://meadow.bearblog.dev/">meadow</a>. If
+        you want to get in contact with me then you can send me an email at <code>`meadowingc 🦆 proton 🔮 me`</code>.
+    </p>
+    <br />
 
-<hr/>
+    <hr />
 
-<h3>stats</h3>
-<p class="puny" style="margin-top: 1em;">Last computed: {{.Data.LastComputed | timeSince}}</p>
-<br/>
-<div>Number registered users: {{.Data.TotalUsers}}</div>
-<div>Number of unique feeds: {{.Data.NumUniqueFeeds}}</div>
-<div>Total number of posts read: {{.Data.NumReadPosts}}</div>
-<br/>
-<br/>
+    <h3>stats</h3>
+    <p class="puny" style="margin-top: 1em;">Last computed: {{.Data.LastComputed | timeSince}}</p>
+    <br />
+    <div>Number registered users: {{.Data.TotalUsers}}</div>
+    <div>Number of unique feeds: {{.Data.NumUniqueFeeds}}</div>
+    <div>Total number of posts read: {{.Data.NumReadPosts}}</div>
+    <br />
+    <br />
 
-<hr/>
+    <hr />
 
-<h3>privacy and terms of use</h3>
+    <h3>privacy and terms of use</h3>
 
-<p>
-<i>Mire</i> only tracks who you are so that we can know which feeds you've registered to and which posts you've already read. We use cookies to keep track of your session and know what information you should be shown, but we don't share this cookie information with any other sites. We don't track no other information besides your account name and an encrypted version of your password. We don't and will never sell/lend/exchange/peddle/auction nor in general give your data to anyone else. By using the service you agree to cookies being used and the fact that we track basic information to allow site functionality.
-</p>
+    <p>
+        <i>Mire</i> only tracks who you are so that we can know which feeds you've registered to and which posts you've
+        already read. We use cookies to keep track of your session and know what information you should be shown, but we
+        don't share this cookie information with any other sites. We don't track no other information besides your
+        account name and an encrypted version of your password. We don't and will never
+        sell/lend/exchange/peddle/auction nor in general give your data to anyone else. By using the service you agree
+        to cookies being used and the fact that we track basic information to allow site functionality.
+    </p>
 
-<p>
-The software is provided "as is", without warranty of any kind, express or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose and noninfringement. In no event shall the authors or copyright holders be liable for any claim, damages or other liability, whether in an action of contract, tort or otherwise, arising from, out of or in connection with the software or the use or other dealings in the software.
-</p>
+    <p>
+        The software is provided "as is", without warranty of any kind, express or implied, including but not limited to
+        the warranties of merchantability, fitness for a particular purpose and noninfringement. In no event shall the
+        authors or copyright holders be liable for any claim, damages or other liability, whether in an action of
+        contract, tort or otherwise, arising from, out of or in connection with the software or the use or other
+        dealings in the software.
+    </p>
 
 </main>
 

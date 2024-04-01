@@ -1,8 +1,12 @@
 {{ define "err" }}
 {{ template "head" . }}
 {{ template "nav" . }}
+
 <p>
-{{ if .Data }}
+    {{ if .Data }}
 <pre>{{ .Data }}</pre>
 {{ end }}
+</p>
 {{ end }}
+
+{{ template "tail" . }}

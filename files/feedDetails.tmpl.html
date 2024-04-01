@@ -2,23 +2,25 @@
 {{ template "head" . }}
 {{ template "nav" . }}
 
-<h3>{{ .Data.Feed.FeedLink }}</h3>
+<h3><a href="{{ .Data.Feed.FeedLink }}">{{ .Data.Feed.FeedLink }}</a></h3>
 
-<p>
-Title: {{ .Data.Feed.Title }}
+<div>Title: {{ .Data.Feed.Title }}</div>
+<div>Description: {{ .Data.Feed.Description }}</div>
+<br/>
+<div>Last Fetch Failure: {{ if .Data.FetchFailure }}{{ .Data.FetchFailure }}{{ else }}never{{ end }}</div>
 
-Description: {{ .Data.Feed.Description }}
+<h4>Feed Items</h4>
 
-Last Fetch Failure: {{ if .Data.FetchFailure }}{{ .Data.FetchFailure }}{{ else }}never{{ end }}
-</p>
-{{ len .Data.Feed.Items }} Items:</p>
+<p>{{ len .Data.Feed.Items }} Items:</p>
+
 {{ range .Data.Feed.Items }}
 <details>
-<summary>{{ .Title }}</summary>
-<p>Date: {{ .PublishedParsed }}
-Link: <a href="{{ .Link }}">{{ .Link }}</a>
-</p>
+    <summary>{{ .Title }}</summary>
+    <div>Date: {{ .PublishedParsed }}</div>
+    <div>Link: <a href="{{ .Link }}">{{ .Link }}</a></div>
+    <br/>
 </details>
 {{ end }}
+
 {{ template "tail" . }}
 {{ end }}

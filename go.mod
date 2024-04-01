@@ -4,6 +4,7 @@ go 1.22
 
 require (
 	github.com/glebarez/go-sqlite v1.22.0
+	github.com/go-chi/chi/v5 v5.0.12
 	github.com/mmcdole/gofeed v1.3.0
 	golang.org/x/crypto v0.21.0
 )

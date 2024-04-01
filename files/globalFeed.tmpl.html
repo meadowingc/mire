@@ -4,27 +4,26 @@
 
 <main>
 
-<h3>global</h3>
+    <h3>global</h3>
 
-<p>
-Here you're seeing the last {{ len .Data }} posts from all feeds known to the system.
-</p>
+    <p>
+        Here you're seeing the last {{ len .Data }} posts from all feeds known to the system.
+    </p>
 
-<ul>
-{{ range .Data }}
-<li>
+    <ul>
+        {{ range .Data }}
+        <li>
 
-<a href="{{ .URL }}">
-    {{ .Title }}
-</a>
-<br>
-<span class=puny 
-      title="{{ .PublishedDatetime }}">published {{ .PublishedDatetime | timeSince }} via <a
-      href="//{{ .URL | printDomain }}">{{ .URL | printDomain }}</a></span>
+            <a href="{{ .URL }}">
+                {{ .Title }}
+            </a>
+            <br>
+            <span class=puny title="{{ .PublishedDatetime }}">published {{ .PublishedDatetime | timeSince }} via <a
+                    href="//{{ .URL | printDomain }}">{{ .URL | printDomain }}</a></span>
 
-</li>
-{{ end }}
-</ul>
+        </li>
+        {{ end }}
+    </ul>
 
 </main>
 
