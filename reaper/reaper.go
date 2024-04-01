@@ -1,6 +1,7 @@
 package reaper
 
 import (
+	"fmt"
 	"log"
 	"regexp"
 	"sort"
@@ -98,6 +99,32 @@ func (r *Reaper) startDbSaver() {
 	}
 }
 
+func tryParseDate(dateStr string) (time.Time, error) {
+	formats := []string{
+		time.RFC3339,
+		time.RFC3339Nano,
+		time.RFC1123,
+		time.RFC1123Z,
+		time.RFC822,
+		time.RFC822Z,
+		time.RFC850,
+		time.ANSIC,
+		time.UnixDate,
+		time.RubyDate,
+		// custom formats
+		"Mon Jan 2 03:04:05 PM MST 2006",
+	}
+
+	for _, layout := range formats {
+		date, err := time.Parse(layout, dateStr)
+		if err == nil {
+			return date, nil
+		}
+	}
+
+	return time.Time{}, fmt.Errorf("unable to parse date: %s", dateStr)
+}
+
 func sanitizeFeedItems(feed *gofeed.Feed) {
 	whitespaceRegexp := regexp.MustCompile(`\s+`)
 	seen := make(map[string]bool)
@@ -109,6 +136,17 @@ func sanitizeFeedItems(feed *gofeed.Feed) {
 
 		// strip whitespaces in item link
 		item.Link = strings.TrimSpace(item.Link)
+
+		// if the item doesn't have a parsed date, try to parse it
+		if item.PublishedParsed == nil {
+			parsedDate, err := tryParseDate(item.Published)
+			if err != nil {
+				log.Printf("[err] reaper: could not parse date '%s' for item '%s' in feed '%s'\n", item.Published, item.Title, feed.FeedLink)
+				item.PublishedParsed = &time.Time{}
+			} else {
+				item.PublishedParsed = &parsedDate
+			}
+		}
 
 		// if the link is not in the seen map, add it to uniqueItems and mark it as seen
 		if !seen[item.Link] {
@@ -153,6 +191,15 @@ func (r *Reaper) updateFeedAndSaveNewItemsToDb(fh *FeedHolder) {
 	}
 
 	sanitizeFeedItems(newF)
+
+	if newF.PublishedParsed == nil {
+		parsedDate, err := tryParseDate(newF.Published)
+		if err == nil {
+			// we don't log an error here since we don't really care if the feed
+			// has a date or not
+			newF.PublishedParsed = &parsedDate
+		}
+	}
 
 	newF.FeedLink = f.FeedLink // sometimes this gets overwritten for some reason
 
