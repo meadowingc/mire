@@ -31,6 +31,14 @@ type UserPostEntry struct {
 	IsRead bool
 }
 
+var listOfSpammyFeeds = []string{
+	"slashdot.org",
+	"thisiscolossal.com",
+	"vox.com",
+	"arstechnica.com",
+	"www.youtube.com",
+}
+
 var mutex = make(chan struct{}, 1)
 
 // New opens a sqlite database, populates it with tables, and
@@ -89,6 +97,33 @@ func New(path string) *DB {
 	mutex <- struct{}{}
 
 	return &DB{sql: db}
+}
+
+func (db *DB) TryParseDate(dateStr string) (time.Time, error) {
+	formats := []string{
+		time.RFC3339,
+		time.RFC3339Nano,
+		time.RFC1123,
+		time.RFC1123Z,
+		time.RFC822,
+		time.RFC822Z,
+		time.RFC850,
+		time.ANSIC,
+		time.UnixDate,
+		time.RubyDate,
+		// custom formats
+		"Mon Jan 2 03:04:05 PM MST 2006",
+		"2006-01-02 15:04:05-07:00",
+	}
+
+	for _, layout := range formats {
+		date, err := time.Parse(layout, dateStr)
+		if err == nil {
+			return date, nil
+		}
+	}
+
+	return time.Time{}, fmt.Errorf("unable to parse date: %s", dateStr)
 }
 
 func lock() {
@@ -460,13 +495,26 @@ func (db *DB) GetPostId(postUrl, username string) int {
 	return pid
 }
 
-func (db *DB) GetLatestPosts(limit int) []*Post {
-	rows, err := db.sql.Query(`
+func (db *DB) GetLatestPostsForGlobal(limit int) []*Post {
+	query := `
         SELECT title, url, MAX(published_at) as published_at
         FROM post
+        WHERE `
+
+	// Add a 'NOT LIKE' clause for each item in the exclusion list
+	for i, url := range listOfSpammyFeeds {
+		if i > 0 {
+			query += " AND "
+		}
+		query += fmt.Sprintf("url NOT LIKE '%%%s%%'", url)
+	}
+
+	query += `
         GROUP BY url
         ORDER BY published_at DESC
-        LIMIT ?`, limit)
+        LIMIT ?`
+
+	rows, err := db.sql.Query(query, limit)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -481,12 +529,7 @@ func (db *DB) GetLatestPosts(limit int) []*Post {
 			log.Fatal(err)
 		}
 
-		layout := time.RFC3339
-		if !strings.Contains(publishedTime, "T") {
-			layout = "2006-01-02 15:04:05-07:00"
-		}
-
-		p.PublishedDatetime, err = time.Parse(layout, publishedTime)
+		p.PublishedDatetime, err = db.TryParseDate(publishedTime)
 		if err != nil {
 			log.Fatal(err)
 		}
