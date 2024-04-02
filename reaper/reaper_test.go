@@ -46,7 +46,7 @@ func TestNewPostsGetAddedToDatabase(t *testing.T) {
 
 	time.Sleep(11 * time.Second) // 11 to account for the saver delay
 
-	if len(db.GetLatestPosts(10)) == 0 {
+	if len(db.GetLatestPostsForGlobal(10)) == 0 {
 		t.Fatal("expected 3 posts in db")
 	}
 }
