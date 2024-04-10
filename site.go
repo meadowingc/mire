@@ -141,7 +141,7 @@ func (s *Site) userHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	items := s.db.GetPostsForUser(username, 150)
+	items := s.db.GetPostsForUser(username, 300)
 
 	// get the N oldest unread items
 	oldestItems := make([]*sqlite.UserPostEntry, len(items))
