@@ -7,18 +7,50 @@
   <p>you can view your (public) blogroll here: <a href="/u/{{ .Username }}/blogroll">mire.meadowing.club/u/{{ .Username
       }}/blogroll</a></p>
 
-  <p>{{ len .Data }} subscriptions:</p>
+  <br/>
+  <hr/>
+  <section id="user-preferences">
+    <h4>User Preferences</h4>
+    <form method="POST" action="/settings/preferences">
+      {{ $up := .Data.UserPreferences }}
 
-  <form method="POST" action="/settings/submit">
+      <!-- numUnreadPostsToShowInHomeScreen -->
+      <label for="numUnreadPostsToShowInHomeScreen">Number of unread posts to load in home screen (set to 0 to disable):</label>
+      <input 
+        type="number" 
+        name="numUnreadPostsToShowInHomeScreen" 
+        id="numUnreadPostsToShowInHomeScreen" 
+        value="{{ $up.NumUnreadPostsToShowInHomeScreen }}"
+        max="20"
+        min="0">
+
+      <!-- numPostsToShowInHomeScreen -->
+      <label for="numPostsToShowInHomeScreen">Number of posts to load in home screen:</label>
+      <select name="numPostsToShowInHomeScreen" id="numPostsToShowInHomeScreen">
+        {{ $numPostsOptions := makeSlice 50 100 150 200 300 }}
+        {{ range $numPostsOptions }}
+        <option value="{{ . }}" {{ if eq $up.NumPostsToShowInHomeScreen . }}selected{{ end }}>{{ . }}</option>
+        {{ end }}
+      </select>
+      <br/>
+      <br/>
+      <input type="submit" value="Save Preferences">
+    </form>
+  </section>
+  <br/>
+  <hr/>
+
+  <p>{{ len .Data.UrlsAndErrors }} subscriptions:</p>
+  <form method="POST" action="/settings/subscribe">
     <textarea name="submit" rows="10" cols="50">
-{{ range .Data -}}
+{{ range .Data.UrlsAndErrors -}}
 {{ .URL }}
 {{ end -}}
-</textarea>
-    <br>
+    </textarea>
+    <br/>
     <input type="submit" value="subscribe">
   </form>
-  {{ $length := len .Data }}
+  {{ $length := len .Data.UrlsAndErrors }}
   {{ if eq $length 0 }}
   <pre>
 ‼️ tutorial ‼️
@@ -54,7 +86,7 @@ https://www.visakanv.com/feed/
   <p>feed details</p>
   {{ end }}
   <pre>
-{{ range .Data -}}
+{{ range .Data.UrlsAndErrors -}}
 {{- $hasError := ne .Error "" -}}
 <a href="/feeds/{{ .URL | escapeURL }}">{{ .URL }}</a> {{ if $hasError }}<span title="{{ .Error }}"
   style="cursor: pointer;">⚠️</span>{{ end }}
