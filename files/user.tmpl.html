@@ -25,6 +25,7 @@
 	{{ end }} <!-- if eq $length 0 -->
 
 	{{- if and .Data.RequestingOwnPage
+		       (gt .Data.UserPreferences.NumUnreadPostsToShowInHomeScreen 0)
 			   (gt (len .Data.OldestUnread) 0) -}}
 	<p class="puny" style="margin-top: 2em;">Displaying {{len .Data.OldestUnread}} oldest unread posts from timeline</p>
 	<ul>

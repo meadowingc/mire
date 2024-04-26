@@ -39,7 +39,8 @@ func main() {
 	router.Get("/global", s.globalHandler)
 	router.Get("/random", s.visitRandomPostHandler)
 	router.Get("/settings", s.settingsHandler)
-	router.Post("/settings/submit", s.settingsSubmitHandler)
+	router.Post("/settings/subscribe", s.settingsSubscribeHandler)
+	router.Post("/settings/preferences", s.settingsPreferencesHandler)
 	router.Get("/login", s.loginHandler)
 	router.Post("/login", s.loginHandler)
 	router.Get("/logout", s.logoutHandler)
@@ -56,7 +57,7 @@ func main() {
 
 	// left in-place for backwards compat
 	router.Get("/feeds", s.settingsHandler)
-	router.Post("/feeds/submit", s.settingsSubmitHandler)
+	router.Post("/feeds/submit", s.settingsSubscribeHandler)
 
 	go statsCalculatorProcess(s)
 
