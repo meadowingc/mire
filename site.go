@@ -20,6 +20,7 @@ import (
 	"codeberg.org/meadowingc/mire/lib"
 	"codeberg.org/meadowingc/mire/reaper"
 	"codeberg.org/meadowingc/mire/sqlite"
+	"codeberg.org/meadowingc/mire/sqlite/user_preferences"
 	"github.com/mmcdole/gofeed"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -147,11 +148,11 @@ func (s *Site) userHandler(w http.ResponseWriter, r *http.Request) {
 
 	// logged in user preferences
 	loggedInUsername := s.username(r)
-	var userPreferences *sqlite.UserPreferences
+	var userPreferences *user_preferences.UserPreferences
 	if loggedInUsername != "" {
-		userPreferences = s.db.GetUserPreferences(s.db.GetUserID(username))
+		userPreferences = user_preferences.GetUserPreferences(s.db, s.db.GetUserID(username))
 	} else {
-		userPreferences = sqlite.GetDefaultUserPreferences()
+		userPreferences = user_preferences.GetDefaultUserPreferences()
 	}
 
 	numPostsToShow := 200
@@ -188,7 +189,7 @@ func (s *Site) userHandler(w http.ResponseWriter, r *http.Request) {
 		Items             []*sqlite.UserPostEntry
 		OldestUnread      []*sqlite.UserPostEntry
 		RequestingOwnPage bool
-		UserPreferences   *sqlite.UserPreferences
+		UserPreferences   *user_preferences.UserPreferences
 	}{
 		User:              username,
 		Items:             items,
@@ -238,11 +239,11 @@ func (s *Site) settingsHandler(w http.ResponseWriter, r *http.Request) {
 		return urlsAndErrors[i].URL < urlsAndErrors[j].URL
 	})
 
-	userPreferences := s.db.GetUserPreferences(s.db.GetUserID(username))
+	userPreferences := user_preferences.GetUserPreferences(s.db, s.db.GetUserID(username))
 
 	data := struct {
 		UrlsAndErrors   []sqlite.FeedUrlWithError
-		UserPreferences *sqlite.UserPreferences
+		UserPreferences *user_preferences.UserPreferences
 	}{
 		UrlsAndErrors:   urlsAndErrors,
 		UserPreferences: userPreferences,
@@ -344,7 +345,7 @@ func (s *Site) settingsPreferencesHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	newPreferences := &sqlite.UserPreferences{}
+	newPreferences := &user_preferences.UserPreferences{}
 
 	valPointer := reflect.ValueOf(newPreferences)
 	val := valPointer.Elem()
@@ -365,7 +366,7 @@ func (s *Site) settingsPreferencesHandler(w http.ResponseWriter, r *http.Request
 			return
 		}
 
-		sqlite.SetFieldValue(val.Field(i), newValueForField)
+		user_preferences.SetFieldValue(val.Field(i), newValueForField)
 	}
 
 	// validate newPreferences
@@ -383,7 +384,7 @@ func (s *Site) settingsPreferencesHandler(w http.ResponseWriter, r *http.Request
 
 	username := s.username(r)
 	userId := s.db.GetUserID(username)
-	s.db.SaveUserPreferences(userId, newPreferences)
+	user_preferences.SaveUserPreferences(s.db, userId, newPreferences)
 
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
