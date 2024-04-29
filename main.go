@@ -27,10 +27,11 @@ func main() {
 
 func buildRouter(s *Site) *chi.Mux {
 	router := chi.NewRouter()
+	router.Use(middleware.Logger)
 
-	if constants.DEBUG_MODE {
-		router.Use(middleware.Logger)
-	}
+	// if constants.DEBUG_MODE {
+	//   router.Use(middleware.Logger)
+	// }
 
 	router.Use(middleware.Heartbeat("/ping"))
 	router.Use(middleware.SetHeader("X-Clacks-Overhead", "GNU Terry Pratchett"))
