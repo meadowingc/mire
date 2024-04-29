@@ -3,42 +3,49 @@
 {{ template "nav" . }}
 <main class="content-page">
   <h3>Settings</h3>
-  <p>your public url: <a href="/u/{{ .Username }}">mire.meadowing.club/u/{{ .Username }}</a></p>
-  <p>you can view your (public) blogroll here: <a href="/u/{{ .Username }}/blogroll">mire.meadowing.club/u/{{ .Username
-      }}/blogroll</a></p>
+  <p>your public url: <a style="word-wrap: break-word;" href="/u/{{ .Username }}">
+      mire.meadowing.club/u/{{ .Username }}
+    </a>
+  </p>
+  <p>you can view your (public) blogroll here:
+    <a style="word-wrap: break-word;" href="/u/{{ .Username }}/blogroll">
+      mire.meadowing.club/u/{{ .Username }}/blogroll
+    </a>
+  </p>
 
-  <br/>
-  <hr/>
+  <br />
+  <hr />
   <section id="user-preferences">
     <h4>User Preferences</h4>
     <form method="POST" action="/settings/preferences">
       {{ $up := .Data.UserPreferences }}
 
       <!-- numUnreadPostsToShowInHomeScreen -->
-      <label for="numUnreadPostsToShowInHomeScreen">Number of unread posts to load in home screen (set to 0 to disable):</label>
-      <input 
-        type="number" 
-        name="numUnreadPostsToShowInHomeScreen" 
-        id="numUnreadPostsToShowInHomeScreen" 
-        value="{{ $up.NumUnreadPostsToShowInHomeScreen }}"
-        max="20"
-        min="0">
+      <div>
+        <label for="numUnreadPostsToShowInHomeScreen">Number of unread posts to load in home screen (set to 0 to
+          disable):</label>
+        <input type="number" name="numUnreadPostsToShowInHomeScreen" id="numUnreadPostsToShowInHomeScreen"
+          value="{{ $up.NumUnreadPostsToShowInHomeScreen }}" max="20" min="0">
+      </div>
+      <br />
 
       <!-- numPostsToShowInHomeScreen -->
-      <label for="numPostsToShowInHomeScreen">Number of posts to load in home screen:</label>
-      <select name="numPostsToShowInHomeScreen" id="numPostsToShowInHomeScreen">
-        {{ $numPostsOptions := makeSlice 50 100 150 200 300 }}
-        {{ range $numPostsOptions }}
-        <option value="{{ . }}" {{ if eq $up.NumPostsToShowInHomeScreen . }}selected{{ end }}>{{ . }}</option>
-        {{ end }}
-      </select>
-      <br/>
-      <br/>
+      <div>
+        <label for="numPostsToShowInHomeScreen">Number of posts to load in home screen:</label>
+        <select name="numPostsToShowInHomeScreen" id="numPostsToShowInHomeScreen">
+          {{ $numPostsOptions := makeSlice 50 100 150 200 300 }}
+          {{ range $numPostsOptions }}
+          <option value="{{ . }}" {{ if eq $up.NumPostsToShowInHomeScreen . }}selected{{ end }}>{{ . }}</option>
+          {{ end }}
+        </select>
+      </div>
+      <br />
+      <br />
       <input type="submit" value="Save Preferences">
     </form>
   </section>
-  <br/>
-  <hr/>
+  <br />
+  <hr />
 
   <p>{{ len .Data.UrlsAndErrors }} subscriptions:</p>
   <form method="POST" action="/settings/subscribe">
@@ -47,7 +54,7 @@
 {{ .URL }}
 {{ end -}}
     </textarea>
-    <br/>
+    <br />
     <input type="submit" value="subscribe">
   </form>
   {{ $length := len .Data.UrlsAndErrors }}
