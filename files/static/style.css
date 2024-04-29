@@ -21,6 +21,7 @@ a {
 
 textarea {
   width: 100%;
+  box-sizing: border-box;
 }
 
 .content-page a {
@@ -124,5 +125,13 @@ nav a {
 
   .not-requesting-own-page .toggle-read-status-emoji {
     display: none;
+  }
+}
+
+@media screen and (max-width: 350px) {
+  input, select {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
   }
 }
