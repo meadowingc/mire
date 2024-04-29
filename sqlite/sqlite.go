@@ -703,3 +703,51 @@ func (db *DB) GetGlobalNumUsers() int {
 	}
 	return count
 }
+
+func (db *DB) GetSingleUserPreference(userId int, preferenceName string) *string {
+	var preferenceValue string
+
+	query := `SELECT preference_value FROM user_preferences WHERE user_id = ? AND preference_name = ?`
+	err := db.sql.QueryRow(query, userId, preferenceName).Scan(&preferenceValue)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// Preference not found for this user
+			return nil
+		}
+		log.Fatal("getGenericUserPreference:: QueryRow failed: ", err)
+	}
+
+	return &preferenceValue
+}
+
+func (db *DB) SaveSingleUserPreference(userId int, preferenceName, preferenceValue string) error {
+	// Check if the preference already exists
+	var exists bool
+	err := db.sql.QueryRow("SELECT EXISTS(SELECT 1 FROM user_preferences WHERE user_id = ? AND preference_name = ?)", userId, preferenceName).Scan(&exists)
+	if err != nil {
+		log.Printf("SaveUserPreference:: Error checking if preference exists: %v", err)
+		return err
+	}
+
+	if exists {
+		// Update existing preference
+		lock()
+		_, err := db.sql.Exec("UPDATE user_preferences SET preference_value = ? WHERE user_id = ? AND preference_name = ?", preferenceValue, userId, preferenceName)
+		unlock()
+		if err != nil {
+			log.Printf("SaveUserPreference:: Error updating user preference: %v", err)
+			return err
+		}
+	} else {
+		// Insert new preference
+		lock()
+		_, err := db.sql.Exec("INSERT INTO user_preferences (user_id, preference_name, preference_value) VALUES (?, ?, ?)", userId, preferenceName, preferenceValue)
+		unlock()
+		if err != nil {
+			log.Printf("SaveUserPreference:: Error inserting user preference: %v", err)
+			return err
+		}
+	}
+
+	return nil
+}

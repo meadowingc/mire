@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -19,6 +20,7 @@ import (
 	"codeberg.org/meadowingc/mire/lib"
 	"codeberg.org/meadowingc/mire/reaper"
 	"codeberg.org/meadowingc/mire/sqlite"
+	"codeberg.org/meadowingc/mire/sqlite/user_preferences"
 	"github.com/mmcdole/gofeed"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -52,6 +54,9 @@ func New() *Site {
 		"timeSince":   s.timeSince,
 		"trimSpace":   strings.TrimSpace,
 		"escapeURL":   url.QueryEscape,
+		"makeSlice": func(args ...interface{}) []interface{} {
+			return args
+		},
 	}
 
 	tmplFiles := filepath.Join("files", "*.tmpl.html")
@@ -141,24 +146,41 @@ func (s *Site) userHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	items := s.db.GetPostsForUser(username, 300)
+	// logged in user preferences
+	loggedInUsername := s.username(r)
+	var userPreferences *user_preferences.UserPreferences
+	if loggedInUsername != "" {
+		userPreferences = user_preferences.GetUserPreferences(s.db, s.db.GetUserID(username))
+	} else {
+		userPreferences = user_preferences.GetDefaultUserPreferences()
+	}
+
+	numPostsToShow := 200
+	if isUserRequestingOwnPage {
+		numPostsToShow = userPreferences.NumPostsToShowInHomeScreen
+	}
+
+	items := s.db.GetPostsForUser(username, numPostsToShow)
 
 	// get the N oldest unread items
-	oldestItems := make([]*sqlite.UserPostEntry, len(items))
-	copy(oldestItems, items)
-	sort.Slice(oldestItems, func(i, j int) bool {
-		return oldestItems[j].Post.PublishedParsed.After(*oldestItems[i].Post.PublishedParsed)
-	})
-
-	const MAX_UNREAD_ITEMS = 7
 	oldestUnreadPosts := make([]*sqlite.UserPostEntry, 0)
-	for _, item := range oldestItems {
-		if !item.IsRead {
-			oldestUnreadPosts = append(oldestUnreadPosts, item)
-		}
+	if isUserRequestingOwnPage && userPreferences.NumUnreadPostsToShowInHomeScreen > 0 {
+		// sort inversely by date
+		oldestItems := make([]*sqlite.UserPostEntry, len(items))
+		copy(oldestItems, items)
+		sort.Slice(oldestItems, func(i, j int) bool {
+			return oldestItems[j].Post.PublishedParsed.After(*oldestItems[i].Post.PublishedParsed)
+		})
 
-		if len(oldestUnreadPosts) >= MAX_UNREAD_ITEMS {
-			break
+		// get N unread posts
+		for _, item := range oldestItems {
+			if !item.IsRead {
+				oldestUnreadPosts = append(oldestUnreadPosts, item)
+			}
+
+			if len(oldestUnreadPosts) >= userPreferences.NumUnreadPostsToShowInHomeScreen {
+				break
+			}
 		}
 	}
 
@@ -167,11 +189,13 @@ func (s *Site) userHandler(w http.ResponseWriter, r *http.Request) {
 		Items             []*sqlite.UserPostEntry
 		OldestUnread      []*sqlite.UserPostEntry
 		RequestingOwnPage bool
+		UserPreferences   *user_preferences.UserPreferences
 	}{
 		User:              username,
 		Items:             items,
 		OldestUnread:      oldestUnreadPosts,
 		RequestingOwnPage: isUserRequestingOwnPage,
+		UserPreferences:   userPreferences,
 	}
 
 	s.renderPage(w, r, "user", data)
@@ -203,21 +227,32 @@ func (s *Site) settingsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	username := s.username(r)
+	if !s.db.UserExists(username) {
+		http.NotFound(w, r)
+		return
+	}
+
 	urlsAndErrors := s.db.GetUserFeedURLsWithFetchErrors(s.username(r))
 
 	sort.Slice(urlsAndErrors, func(i, j int) bool {
 		return urlsAndErrors[i].URL < urlsAndErrors[j].URL
 	})
 
-	s.renderPage(w, r, "settings", urlsAndErrors)
+	userPreferences := user_preferences.GetUserPreferences(s.db, s.db.GetUserID(username))
+
+	data := struct {
+		UrlsAndErrors   []sqlite.FeedUrlWithError
+		UserPreferences *user_preferences.UserPreferences
+	}{
+		UrlsAndErrors:   urlsAndErrors,
+		UserPreferences: userPreferences,
+	}
+
+	s.renderPage(w, r, "settings", data)
 }
 
-// TODO:
-//
-//	show diff before submission (like tf plan)
-//	check if feed exists in db already?
-//	validate that title exists
-func (s *Site) settingsSubmitHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Site) settingsSubscribeHandler(w http.ResponseWriter, r *http.Request) {
 	if !s.loggedIn(r) {
 		s.renderErr(w, "", http.StatusUnauthorized)
 		return
@@ -300,6 +335,56 @@ func (s *Site) settingsSubmitHandler(w http.ResponseWriter, r *http.Request) {
 	for _, feedUrl := range orphanedFeeds {
 		s.reaper.RemoveFeed(feedUrl)
 	}
+
+	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+}
+
+func (s *Site) settingsPreferencesHandler(w http.ResponseWriter, r *http.Request) {
+	if !s.loggedIn(r) {
+		s.renderErr(w, "", http.StatusUnauthorized)
+		return
+	}
+
+	newPreferences := &user_preferences.UserPreferences{}
+
+	valPointer := reflect.ValueOf(newPreferences)
+	val := valPointer.Elem()
+	typ := val.Type()
+
+	for i := 0; i < val.NumField(); i++ {
+		field := typ.Field(i)
+		tag := field.Tag.Get("db")
+		if tag == "" {
+			log.Fatalf("settingsPreferencesHandler:: Field %s does not have a 'db' tag", field.Name)
+		}
+
+		// `tag` is the expected form name
+		newValueForField := r.FormValue(tag)
+		if newValueForField == "" {
+			e := fmt.Sprintf("no value passed for the required field '%s'", tag)
+			s.renderErr(w, e, http.StatusBadRequest)
+			return
+		}
+
+		user_preferences.SetFieldValue(val.Field(i), newValueForField)
+	}
+
+	// validate newPreferences
+	if newPreferences.NumPostsToShowInHomeScreen < 1 || newPreferences.NumPostsToShowInHomeScreen > 300 {
+		e := fmt.Sprintf("invalid number of posts to show '%d'", newPreferences.NumPostsToShowInHomeScreen)
+		s.renderErr(w, e, http.StatusBadRequest)
+		return
+	}
+
+	if newPreferences.NumUnreadPostsToShowInHomeScreen < 0 || newPreferences.NumUnreadPostsToShowInHomeScreen > 20 {
+		e := fmt.Sprintf("invalid number of unread posts to show '%d'", newPreferences.NumUnreadPostsToShowInHomeScreen)
+		s.renderErr(w, e, http.StatusBadRequest)
+		return
+	}
+
+	username := s.username(r)
+	userId := s.db.GetUserID(username)
+	user_preferences.SaveUserPreferences(s.db, userId, newPreferences)
 
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
@@ -457,6 +542,9 @@ func (s *Site) renderPage(w http.ResponseWriter, r *http.Request, page string, d
 			"timeSince":   s.timeSince,
 			"trimSpace":   strings.TrimSpace,
 			"escapeURL":   url.QueryEscape,
+			"makeSlice": func(args ...interface{}) []interface{} {
+				return args
+			},
 		}
 
 		tmplFiles := filepath.Join("files", "*.tmpl.html")
