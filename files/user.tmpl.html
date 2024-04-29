@@ -100,7 +100,7 @@
 	function setReadStatus(postUrl, newReadStatus) {
 		// {{ if .Data.RequestingOwnPage }}
 		postUrl = encodeURIComponent(postUrl);
-		return fetch(`/api/v1/set-post-status/${postUrl}`, {
+		return fetch(`/api/v1/set-post-read-status/${postUrl}`, {
 			method: "POST",
 			headers: {
 				"Content-Type": "application/x-www-form-urlencoded"
