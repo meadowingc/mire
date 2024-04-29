@@ -17,6 +17,15 @@ func main() {
 	}
 
 	s := New()
+	router := buildRouter(s)
+
+	go statsCalculatorProcess(s)
+
+	log.Println("main: listening on http://localhost:5544")
+	log.Fatal(http.ListenAndServe(":5544", router))
+}
+
+func buildRouter(s *Site) *chi.Mux {
 	router := chi.NewRouter()
 
 	if constants.DEBUG_MODE {
@@ -49,18 +58,11 @@ func main() {
 	router.Get("/feeds/{url}", s.feedDetailsHandler)
 
 	// api functions
-	router.Post("/api/v1/set-post-status/{postUrl}", s.apiSetPostReadStatus)
+	router.Post("/api/v1/set-post-read-status/{postUrl}", s.apiSetPostReadStatus)
 	router.Get("/api/v1/ping", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("pong"))
 	})
 
-	// left in-place for backwards compat
-	router.Get("/feeds", s.settingsHandler)
-	router.Post("/feeds/submit", s.settingsSubscribeHandler)
-
-	go statsCalculatorProcess(s)
-
-	log.Println("main: listening on http://localhost:5544")
-	log.Fatal(http.ListenAndServe(":5544", router))
+	return router
 }
