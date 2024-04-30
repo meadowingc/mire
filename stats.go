@@ -18,6 +18,6 @@ func statsCalculatorProcess(s *Site) {
 		globalStats.NumUniqueFeeds = s.db.GetGlobalNumUniqueFeeds()
 		globalStats.TotalUsers = s.db.GetGlobalNumUsers()
 
-		time.Sleep(24 * time.Hour)
+		time.Sleep(6 * time.Hour)
 	}
 }

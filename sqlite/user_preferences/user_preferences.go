@@ -58,8 +58,8 @@ func GetDefaultUserPreferences() *UserPreferences {
 }
 
 func GetUserPreferences(db *sqlite.DB, userId int) *UserPreferences {
-	userPreferences := UserPreferences{}
-	valPointer := reflect.ValueOf(&userPreferences)
+	userPreferences := GetDefaultUserPreferences()
+	valPointer := reflect.ValueOf(userPreferences)
 	val := valPointer.Elem()
 	typ := val.Type()
 
@@ -86,7 +86,7 @@ func GetUserPreferences(db *sqlite.DB, userId int) *UserPreferences {
 		SetFieldValue(val.Field(i), *preferenceValue)
 	}
 
-	return &userPreferences
+	return userPreferences
 }
 
 func SaveUserPreferences(db *sqlite.DB, userID int, userPreferences *UserPreferences) {
