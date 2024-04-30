@@ -8,7 +8,7 @@
 
 {{ $mainClass := "requesting-own-page" }}
 {{- if not .Data.RequestingOwnPage -}}
-	{{ $mainClass = "not-requesting-own-page" }}
+{{ $mainClass = "not-requesting-own-page" }}
 {{- end -}}
 
 <main class="{{$mainClass}}">
@@ -25,21 +25,24 @@
 	{{ end }} <!-- if eq $length 0 -->
 
 	{{- if and .Data.RequestingOwnPage
-		       (gt .Data.UserPreferences.NumUnreadPostsToShowInHomeScreen 0)
-			   (gt (len .Data.OldestUnread) 0) -}}
+	(gt .Data.UserPreferences.NumUnreadPostsToShowInHomeScreen 0)
+	(gt (len .Data.OldestUnread) 0) -}}
 	<p class="puny" style="margin-top: 2em;">Displaying {{len .Data.OldestUnread}} oldest unread posts from timeline</p>
 	<ul>
 		{{ range .Data.OldestUnread }}
-			{{ template "list_item" . }}
+		{{ template "list_item" . }}
 		{{ end }}
 	</ul>
-	<hr/>
+	<hr />
 	{{- end -}}
 
-	<p class="puny" style="margin-top: 2em;">Displaying last {{ len .Data.Items }} posts from user's timeline</p>
-	<ul>
+	<p class="puny" style="margin-top: 2em;">
+		Displaying last {{ len .Data.Items }} posts from user's timeline
+		{{- if .Data.RequestingOwnPage }} (<span id="unread-counter">...</span> unread) {{- end -}}
+	</p>
+	<ul id="main-user-feed-container">
 		{{ range .Data.Items }}
-			{{ template "list_item" . }}
+		{{ template "list_item" . }}
 		{{ end }}
 	</ul>
 </main>
@@ -48,7 +51,19 @@
 <script>
 	(function () {
 		document.getElementById("loading-indicator").style.display = "none";
+		
+		refreshUnreadCounter();
 	})();
+
+	function refreshUnreadCounter() {
+		// {{ if .Data.RequestingOwnPage }}
+		const unreadCounter = document.querySelector("#unread-counter");
+		if (unreadCounter) {
+			const numUnreadItems = document.querySelectorAll("#main-user-feed-container a.unread").length;
+			unreadCounter.innerHTML = numUnreadItems;
+		}
+		// {{ end }}
+	}
 
 	function toggleReadStatus(event) {
 		// {{ if .Data.RequestingOwnPage }}
@@ -68,6 +83,8 @@
 				titleElement.className = isRead ? "read" : "unread";
 				element.innerText = isRead ? "📜" : "💌";
 			}
+
+			refreshUnreadCounter();
 		});
 		// {{ end }}
 	}
