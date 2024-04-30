@@ -40,6 +40,7 @@ var listOfSpammyFeeds = []string{
 	"www.facebook.com",
 	"longreads.com",
 	"nautil.us",
+	"codeberg.org",
 }
 
 var mutex = make(chan struct{}, 1)
