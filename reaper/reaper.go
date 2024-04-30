@@ -110,9 +110,9 @@ func (r *Reaper) sanitizeFeedItems(feed *gofeed.Feed) {
 		// strip whitespaces in item link
 		item.Link = strings.TrimSpace(item.Link)
 
-		// if item link doesn't start with http(s) then we add it
+		// if link is not a valid http(s) link then we just skip it
 		if !strings.HasPrefix(item.Link, "http://") && !strings.HasPrefix(item.Link, "https://") {
-			item.Link = "https://" + item.Link
+			continue
 		}
 
 		// if the item doesn't have a parsed date, try to parse it
