@@ -1,8 +1,12 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"codeberg.org/meadowingc/mire/constants"
 	"github.com/go-chi/chi/v5"
@@ -21,8 +25,33 @@ func main() {
 
 	go statsCalculatorProcess(s)
 
-	log.Println("main: listening on http://localhost:5544")
-	log.Fatal(http.ListenAndServe(":5544", router))
+	// Setup channel to listen for interrupt signal (ctrl+c)
+	interruptChan := make(chan os.Signal, 1)
+	signal.Notify(interruptChan, os.Interrupt, syscall.SIGTERM)
+
+	server := &http.Server{Addr: ":5544", Handler: router}
+	go func() {
+		log.Println("main: listening on http://localhost:5544")
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("listen: %s\n", err)
+		}
+	}()
+
+	// Block until we receive our interrupt
+	<-interruptChan
+
+	log.Println("main: shutting down server...")
+
+	err := s.db.Close()
+	if err != nil {
+		log.Fatalf("main: database shutdown failed: %+v", err)
+	}
+
+	if err := server.Shutdown(context.TODO()); err != nil {
+		log.Fatalf("main: server shutdown failed: %+v", err)
+	}
+
+	log.Println("main: server gracefully stopped")
 }
 
 func buildRouter(s *Site) *chi.Mux {
