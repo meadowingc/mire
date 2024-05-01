@@ -105,6 +105,10 @@ func New(path string) *DB {
 	return &DB{sql: db}
 }
 
+func (db *DB) Close() error {
+	return db.sql.Close()
+}
+
 func (db *DB) TryParseDate(dateStr string) (time.Time, error) {
 	formats := []string{
 		time.RFC3339,
@@ -262,6 +266,23 @@ func (db *DB) GetAllFeedURLs() []string {
 		urls = append(urls, url)
 	}
 	return urls
+}
+
+func (db *DB) GetNumSubscribersForFeed(feedUrl string) int {
+	var count int
+	query := `
+SELECT COUNT(s.id) 
+FROM subscribe s
+JOIN feed f ON s.feed_id = f.id
+WHERE f.url = ?
+`
+	err := db.sql.QueryRow(query, feedUrl).Scan(&count)
+	if err != nil {
+		log.Printf("Error getting number of subscribers for feed: %v", err)
+		return 0
+	}
+	return count
+
 }
 
 func (db *DB) GetUserFeedURLs(username string) []string {
