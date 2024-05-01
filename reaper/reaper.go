@@ -1,6 +1,7 @@
 package reaper
 
 import (
+	"fmt"
 	"log"
 	"regexp"
 	"sort"
@@ -154,8 +155,7 @@ func (r *Reaper) updateFeedAndSaveNewItemsToDb(fh *FeedHolder) {
 		originalItemsMap[item.Link] = item
 	}
 
-	fp := gofeed.NewParser()
-	newF, err := fp.ParseURL(f.FeedLink)
+	newF, err := r.RawFetchFeed(f.FeedLink)
 
 	if err != nil {
 		r.handleFeedFetchFailure(f.FeedLink, err)
@@ -321,11 +321,22 @@ func (r *Reaper) RemoveFeed(url string) {
 	unlock()
 }
 
+func (r *Reaper) RawFetchFeed(url string) (*gofeed.Feed, error) {
+	fp := gofeed.NewParser()
+
+	// Be a nice internet citizen and add how a descriptive user agent header
+	// with subscriber stats.
+	// https://www.lesswrong.com/posts/djn3nJnnHYX7tReFa/looking-at-rss-user-agents
+	numSubscribersForFeed := r.db.GetNumSubscribersForFeed(url)
+	fp.UserAgent = fmt.Sprintf("Mire (+https://mire.meadowing.club) - %d subscribers", numSubscribersForFeed)
+
+	return fp.ParseURL(url)
+}
+
 // Fetch attempts to fetch a feed from a given url, marshal
 // it into a feed object, and manage it via reaper.
 func (r *Reaper) Fetch(url string) error {
-	fp := gofeed.NewParser()
-	feed, err := fp.ParseURL(url)
+	feed, err := r.RawFetchFeed(url)
 	if err != nil {
 		return err
 	}
