@@ -226,7 +226,7 @@ func (r *Reaper) updateFeedAndSaveNewItemsToDb(fh *FeedHolder) {
 // asynchronously, then prints the duration of the sync
 func (r *Reaper) refreshAllFeeds() {
 	start := time.Now()
-	semaphore := make(chan struct{}, 20)
+	semaphore := make(chan struct{}, 5)
 	var wg sync.WaitGroup
 
 	for feedLink := range r.feeds {
