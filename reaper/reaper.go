@@ -155,7 +155,7 @@ func (r *Reaper) updateFeedAndSaveNewItemsToDb(fh *FeedHolder) {
 		originalItemsMap[item.Link] = item
 	}
 
-	newF, err := r.RawFetchFeed(f.FeedLink)
+	newF, err := r.rawFetchFeed(f.FeedLink)
 
 	if err != nil {
 		r.handleFeedFetchFailure(f.FeedLink, err)
@@ -321,7 +321,7 @@ func (r *Reaper) RemoveFeed(url string) {
 	unlock()
 }
 
-func (r *Reaper) RawFetchFeed(url string) (*gofeed.Feed, error) {
+func (r *Reaper) rawFetchFeed(url string) (*gofeed.Feed, error) {
 	fp := gofeed.NewParser()
 
 	// Be a nice internet citizen and add how a descriptive user agent header
@@ -336,7 +336,7 @@ func (r *Reaper) RawFetchFeed(url string) (*gofeed.Feed, error) {
 // Fetch attempts to fetch a feed from a given url, marshal
 // it into a feed object, and manage it via reaper.
 func (r *Reaper) Fetch(url string) error {
-	feed, err := r.RawFetchFeed(url)
+	feed, err := r.rawFetchFeed(url)
 	if err != nil {
 		return err
 	}

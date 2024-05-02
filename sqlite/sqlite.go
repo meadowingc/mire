@@ -43,6 +43,7 @@ var listOfSpammyFeeds = []string{
 	"codeberg.org",
 	"finshots.in",
 	"namecoin.org",
+	"kagifeedback.org",
 }
 
 var mutex = make(chan struct{}, 1)
