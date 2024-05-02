@@ -75,9 +75,10 @@ func (r *Reaper) start() {
 			FeedLink: url,
 		}
 
+		lastRefreshed := r.db.GetFeedLastRefreshTime(feed.FeedLink)
 		r.feeds[url] = &FeedHolder{
 			Feed:        feed,
-			LastFetched: time.Now().Add(-timeToBecomeStale), // force refresh
+			LastFetched: lastRefreshed,
 		}
 	}
 	unlock()
@@ -189,10 +190,14 @@ func (r *Reaper) updateFeedAndSaveNewItemsToDb(fh *FeedHolder) {
 		r.AddFeedStub(newF.FeedLink)
 	}
 
+	fetchTime := time.Now()
 	lock()
-	r.feeds[newF.FeedLink].LastFetched = time.Now()
+	r.feeds[newF.FeedLink].LastFetched = fetchTime
 	r.feeds[newF.FeedLink].Feed = newF
 	unlock()
+
+	// update fetch time in DB
+	r.db.UpdateFeedLastRefreshTime(newF.FeedLink, fetchTime)
 
 	newItems := []*gofeed.Item{}
 	for _, item := range newF.Items {
@@ -340,6 +345,8 @@ func (r *Reaper) Fetch(url string) error {
 	if err != nil {
 		return err
 	}
+
+	feed.FeedLink = url // sometimes this gets overwritten for some reason
 
 	r.sanitizeFeedItems(feed)
 

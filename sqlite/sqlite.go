@@ -447,8 +447,7 @@ func (db *DB) GetFeedID(feedURL string) int {
 // if the given feed already exists, WriteFeed does nothing.
 func (db *DB) WriteFeed(url string) {
 	lock()
-	_, err := db.sql.Exec(`INSERT INTO feed(url) VALUES(?)
-				ON CONFLICT(url) DO NOTHING`, url)
+	_, err := db.sql.Exec(`INSERT INTO feed(url) VALUES(?) ON CONFLICT(url) DO NOTHING`, url)
 	unlock()
 
 	if err != nil {
@@ -775,4 +774,23 @@ func (db *DB) SaveSingleUserPreference(userId int, preferenceName, preferenceVal
 	}
 
 	return nil
+}
+
+func (db *DB) GetFeedLastRefreshTime(feedURL string) time.Time {
+	var lastRefreshed time.Time
+	err := db.sql.QueryRow("SELECT last_refreshed FROM feed WHERE url=?", feedURL).Scan(&lastRefreshed)
+	if err != nil {
+		log.Printf("GetLastRefreshTime:: Error getting last refresh time for feed %s: %v", feedURL, err)
+		return time.Time{} // Return zero time on error
+	}
+	return lastRefreshed
+}
+
+func (db *DB) UpdateFeedLastRefreshTime(feedURL string, lastRefreshed time.Time) {
+	lock()
+	_, err := db.sql.Exec("UPDATE feed SET last_refreshed=? WHERE url=?", lastRefreshed.UTC(), feedURL)
+	unlock()
+	if err != nil {
+		log.Printf("UpdateLastRefreshTime:: Error updating last refresh time for feed %s: %v", feedURL, err)
+	}
 }
