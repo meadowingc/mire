@@ -313,6 +313,9 @@ func (s *Site) settingsSubscribeHandler(w http.ResponseWriter, r *http.Request) 
 
 			newFeed := s.reaper.GetFeed(u)
 
+			// update fetch time in DB
+			s.db.UpdateFeedLastRefreshTime(newFeed.FeedLink, time.Now())
+
 			// save feed posts to db
 			for _, post := range newFeed.Items {
 				s.db.SavePost(u, post.Title, post.Link, *post.PublishedParsed)
