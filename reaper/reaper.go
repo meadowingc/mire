@@ -3,6 +3,7 @@ package reaper
 import (
 	"fmt"
 	"log"
+	"math/rand"
 	"regexp"
 	"sort"
 	"strings"
@@ -240,6 +241,12 @@ func (r *Reaper) refreshAllFeeds() {
 					<-semaphore // release the token when done
 					wg.Done()   // decrement the WaitGroup counter
 				}()
+
+				// wait a random amount of time so we spread out the fetches as
+				// time goes on (we don't want to do "burst" of fetches every
+				// `timeToBecomeStale`)
+				time.Sleep(time.Duration(10+rand.Intn(20)) * time.Millisecond)
+
 				r.updateFeedAndSaveNewItemsToDb(feedHolder)
 			}(r.feeds[feedLink])
 		}
