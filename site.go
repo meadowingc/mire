@@ -105,7 +105,7 @@ func (s *Site) loginHandler(w http.ResponseWriter, r *http.Request) {
 
 		err := s.login(w, username, password)
 		if err != nil {
-			s.renderErr(w, err.Error(), http.StatusUnauthorized)
+			s.renderErr("loginHandler", w, err.Error(), http.StatusUnauthorized)
 			return
 		}
 		http.Redirect(w, r, "/", http.StatusSeeOther)
@@ -126,12 +126,12 @@ func (s *Site) registerHandler(w http.ResponseWriter, r *http.Request) {
 	password := r.FormValue("password")
 	err := s.register(username, password)
 	if err != nil {
-		s.renderErr(w, err.Error(), http.StatusInternalServerError)
+		s.renderErr("registerHandler", w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	err = s.login(w, username, password)
 	if err != nil {
-		s.renderErr(w, err.Error(), http.StatusInternalServerError)
+		s.renderErr("registerHandler", w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	http.Redirect(w, r, "/", http.StatusSeeOther)
@@ -223,7 +223,7 @@ func (s *Site) userBlogrollHandler(w http.ResponseWriter, r *http.Request) {
 
 func (s *Site) settingsHandler(w http.ResponseWriter, r *http.Request) {
 	if !s.loggedIn(r) {
-		s.renderErr(w, "", http.StatusUnauthorized)
+		s.renderErr("settingsHandler", w, "", http.StatusUnauthorized)
 		return
 	}
 
@@ -254,7 +254,7 @@ func (s *Site) settingsHandler(w http.ResponseWriter, r *http.Request) {
 
 func (s *Site) settingsSubscribeHandler(w http.ResponseWriter, r *http.Request) {
 	if !s.loggedIn(r) {
-		s.renderErr(w, "", http.StatusUnauthorized)
+		s.renderErr("settingsSubscribeHandler", w, "", http.StatusUnauthorized)
 		return
 	}
 
@@ -273,7 +273,7 @@ func (s *Site) settingsSubscribeHandler(w http.ResponseWriter, r *http.Request) 
 		}
 		if _, err := url.ParseRequestURI(inputURL); err != nil {
 			e := fmt.Sprintf("can't parse url '%s': %s", inputURL, err)
-			s.renderErr(w, e, http.StatusBadRequest)
+			s.renderErr("settingsSubscribeHandler", w, e, http.StatusBadRequest)
 			return
 		}
 		validatedURLs = append(validatedURLs, inputURL)
@@ -344,7 +344,7 @@ func (s *Site) settingsSubscribeHandler(w http.ResponseWriter, r *http.Request) 
 
 func (s *Site) settingsPreferencesHandler(w http.ResponseWriter, r *http.Request) {
 	if !s.loggedIn(r) {
-		s.renderErr(w, "", http.StatusUnauthorized)
+		s.renderErr("settingsPreferencesHandler", w, "", http.StatusUnauthorized)
 		return
 	}
 
@@ -365,7 +365,7 @@ func (s *Site) settingsPreferencesHandler(w http.ResponseWriter, r *http.Request
 		newValueForField := r.FormValue(tag)
 		if newValueForField == "" {
 			e := fmt.Sprintf("no value passed for the required field '%s'", tag)
-			s.renderErr(w, e, http.StatusBadRequest)
+			s.renderErr("settingsPreferencesHandler", w, e, http.StatusBadRequest)
 			return
 		}
 
@@ -375,13 +375,13 @@ func (s *Site) settingsPreferencesHandler(w http.ResponseWriter, r *http.Request
 	// validate newPreferences
 	if newPreferences.NumPostsToShowInHomeScreen < 1 || newPreferences.NumPostsToShowInHomeScreen > 300 {
 		e := fmt.Sprintf("invalid number of posts to show '%d'", newPreferences.NumPostsToShowInHomeScreen)
-		s.renderErr(w, e, http.StatusBadRequest)
+		s.renderErr("settingsPreferencesHandler", w, e, http.StatusBadRequest)
 		return
 	}
 
 	if newPreferences.NumUnreadPostsToShowInHomeScreen < 0 || newPreferences.NumUnreadPostsToShowInHomeScreen > 20 {
 		e := fmt.Sprintf("invalid number of unread posts to show '%d'", newPreferences.NumUnreadPostsToShowInHomeScreen)
-		s.renderErr(w, e, http.StatusBadRequest)
+		s.renderErr("settingsPreferencesHandler", w, e, http.StatusBadRequest)
 		return
 	}
 
@@ -397,14 +397,14 @@ func (s *Site) feedDetailsHandler(w http.ResponseWriter, r *http.Request) {
 	decodedURL, err := url.QueryUnescape(encodedURL)
 	if err != nil {
 		e := fmt.Sprintf("failed to decode URL '%s' %s", encodedURL, err)
-		s.renderErr(w, e, http.StatusBadRequest)
+		s.renderErr("feedDetailsHandler", w, e, http.StatusBadRequest)
 		return
 	}
 
 	fetchErr, err := s.db.GetFeedFetchError(decodedURL)
 	if err != nil {
 		e := fmt.Sprintf("failed to fetch feed error '%s' %s", encodedURL, err)
-		s.renderErr(w, e, http.StatusBadRequest)
+		s.renderErr("feedDetailsHandler", w, e, http.StatusBadRequest)
 		return
 	}
 
@@ -498,14 +498,14 @@ func (s *Site) visitRandomPostHandler(w http.ResponseWriter, r *http.Request) {
 
 func (s *Site) apiSetPostReadStatus(w http.ResponseWriter, r *http.Request) {
 	if !s.loggedIn(r) {
-		s.renderErr(w, "", http.StatusUnauthorized)
+		s.renderErr("visitRandomPostHandler", w, "", http.StatusUnauthorized)
 		return
 	}
 
 	postUrlEncoded := r.PathValue("postUrl")
 	postUrl, err := url.QueryUnescape(postUrlEncoded)
 	if err != nil {
-		s.renderErr(w, err.Error(), http.StatusBadRequest)
+		s.renderErr("visitRandomPostHandler", w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -556,7 +556,7 @@ func (s *Site) renderPage(w http.ResponseWriter, r *http.Request, page string, d
 
 	err := templates.ExecuteTemplate(w, page, pageData)
 	if err != nil {
-		s.renderErr(w, err.Error(), http.StatusInternalServerError)
+		s.renderErr("renderPage", w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -611,7 +611,7 @@ func (s *Site) timeSince(t time.Time) string {
 
 // renderErr sets the correct http status in the header,
 // optionally decorates certain errors, then renders the err page
-func (s *Site) renderErr(w http.ResponseWriter, error string, code int) {
+func (s *Site) renderErr(caller string, w http.ResponseWriter, error string, code int) {
 	var prefix string
 	switch code {
 	case http.StatusBadRequest:
@@ -623,7 +623,7 @@ func (s *Site) renderErr(w http.ResponseWriter, error string, code int) {
 		prefix += "we made a fucky wucky (╥﹏╥)\n\n"
 		prefix += "500 internal server error\n"
 	}
-	log.Println(prefix + error)
+	log.Println(caller + ":: " + prefix + error)
 	http.Error(w, prefix+error, code)
 }
 
