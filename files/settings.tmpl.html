@@ -101,7 +101,8 @@ https://www.visakanv.com/feed/
   </pre>
   {{ else if gt $length 0 }}
   <p>feed details</p>
-  <p class="puny" style="margin-top: 2em;">Click on the little moon next to each feed to toggle it's <i>favorite</i> status.</p>
+  <p class="puny" style="margin-top: 2em;">Click on the little moon next to each feed to toggle it's <i>favorite</i>
+    status. Unread items from these will appear at the very top of your feed.</p>
   {{ end }}
   <pre>
 {{ range .Data.UrlsAndErrors -}}
@@ -114,23 +115,29 @@ https://www.visakanv.com/feed/
 
 <script>
   function toggleFavoriteFeed(feedUrl, element) {
+    const oldFavoriteClass = element.className;
+
     let newFeedFavoriteStatus = true;
-    if (element.className === "favorite-link") {
+    if (oldFavoriteClass === "favorite-link") {
       element.className = "not-favorite-link";
       newFeedFavoriteStatus = false; // changing to non-favorite
     } else {
       element.className = "favorite-link";
       newFeedFavoriteStatus = true; // changing to favorite
     }
-    
+
     const encodedFeed = encodeURIComponent(feedUrl)
-		return fetch(`/api/v1/toggle-favorite-feed-status/${encodedFeed}`, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/x-www-form-urlencoded"
-			},
-			body: `new_is_favorite=${encodeURIComponent(newFeedFavoriteStatus)}`
-		});
+    fetch(`/api/v1/toggle-favorite-feed-status/${encodedFeed}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: `new_is_favorite=${encodeURIComponent(newFeedFavoriteStatus)}`
+    }).then(function (response) {
+      if (response.status !== 200) {
+        element.className = oldFavoriteClass;
+      }
+    });
   }
 </script>
 
