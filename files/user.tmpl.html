@@ -31,9 +31,9 @@
 	{{- if gt (len .Data.FavoritesUnread) 0 -}}
 	<p class="puny" style="margin-top: 2em;">Displaying {{len .Data.FavoritesUnread}} unread posts from favorite feeds</p>
 	<ul id="favorite-feeds-container">
-	    {{ range .Data.FavoritesUnread }}
-	    {{ template "list_item" . }}
-	    {{ end }}
+		{{ range .Data.FavoritesUnread }}
+		{{ template "list_item" . }}
+		{{ end }}
 	</ul>
 	<hr />
 	{{- end -}}
@@ -60,12 +60,12 @@
 
 
 <script>
-    // Placeholder function to refresh the favorite feeds list
-    function refreshFavoriteFeeds() {
-        // You will need to implement the logic to fetch the unread posts from favorite feeds and update the UI accordingly.
-        // For now, this is just a placeholder function.
-        console.log('Refreshing favorite feeds...');
-    }
+	// Placeholder function to refresh the favorite feeds list
+	function refreshFavoriteFeeds() {
+		// You will need to implement the logic to fetch the unread posts from favorite feeds and update the UI accordingly.
+		// For now, this is just a placeholder function.
+		console.log('Refreshing favorite feeds...');
+	}
 
 	(function () {
 		document.getElementById("loading-indicator").style.display = "none";
@@ -92,14 +92,24 @@
 		const postUrl = encodeURIComponent(titleElement.href);
 		const newReadStatus = !isRead;
 
-		titleElement.className = newReadStatus ? "read" : "unread";
-		element.innerText = newReadStatus ? "📜" : "💌";
+		const allSameUrlElements = Array
+			.from(document.querySelectorAll(`a[href='${titleElement.href}']`))
+			.map(linkHolderElement => {
+				return linkHolderElement.parentElement.querySelectorAll("a")[0];
+			});
+
+		allSameUrlElements.forEach(el => {
+			el.className = newReadStatus ? "read" : "unread";
+			el.innerText = newReadStatus ? "📜" : "💌";
+		});
 
 		setReadStatus(postUrl, newReadStatus).then(function (response) {
 			if (response.status !== 200) {
 				// undo the change
-				titleElement.className = isRead ? "read" : "unread";
-				element.innerText = isRead ? "📜" : "💌";
+				allSameUrlElements.forEach(el => {
+					el.className = isRead ? "read" : "unread";
+					el.innerText = isRead ? "📜" : "💌";
+				});
 			}
 
 			refreshUnreadCounter();
@@ -116,8 +126,16 @@
 		const element = event.target;
 		const postUrl = encodeURIComponent(element.href);
 
-		element.parentElement.querySelectorAll("a")[0].innerText = "📜";
-		element.className = "read";
+		const allSameUrlElements = Array
+			.from(document.querySelectorAll(`a[href='${element.href}']`))
+			.map(linkHolderElement => {
+				return linkHolderElement.parentElement.querySelectorAll("a")[0];
+			});
+
+		allSameUrlElements.forEach(el => {
+			el.className = "read";
+			el.innerText = "📜";
+		});
 
 		// Always mark the post as read
 		await setReadStatus(postUrl, true);
