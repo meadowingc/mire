@@ -164,6 +164,8 @@ func (s *Site) userHandler(w http.ResponseWriter, r *http.Request) {
 
 	// get the N oldest unread items
 	oldestUnreadPosts := make([]*sqlite.UserPostEntry, 0)
+	favoritesUnread := make([]*sqlite.UserPostEntry, 0)
+
 	if isUserRequestingOwnPage && userPreferences.NumUnreadPostsToShowInHomeScreen > 0 {
 		// sort inversely by date
 		oldestItems := make([]*sqlite.UserPostEntry, len(items))
@@ -182,6 +184,15 @@ func (s *Site) userHandler(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 		}
+
+		// get unread favorites
+		favoritesUnreadFromDb, err := s.db.GetFavoriteUnreadPosts(username, userPreferences.NumUnreadPostsToShowInHomeScreen)
+		if err != nil {
+			s.renderErr("userHandler", w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		favoritesUnread = favoritesUnreadFromDb
 	}
 
 	data := struct {
@@ -190,12 +201,14 @@ func (s *Site) userHandler(w http.ResponseWriter, r *http.Request) {
 		OldestUnread      []*sqlite.UserPostEntry
 		RequestingOwnPage bool
 		UserPreferences   *user_preferences.UserPreferences
+		FavoritesUnread   []*sqlite.UserPostEntry
 	}{
 		User:              username,
 		Items:             items,
 		OldestUnread:      oldestUnreadPosts,
 		RequestingOwnPage: isUserRequestingOwnPage,
 		UserPreferences:   userPreferences,
+		FavoritesUnread:   favoritesUnread,
 	}
 
 	s.renderPage(w, r, "user", data)
@@ -233,7 +246,7 @@ func (s *Site) settingsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	urlsAndErrors := s.db.GetUserFeedURLsWithFetchErrors(s.username(r))
+	urlsAndErrors := s.db.GetUserFeedURLsForSettings(s.username(r))
 
 	sort.Slice(urlsAndErrors, func(i, j int) bool {
 		return urlsAndErrors[i].URL < urlsAndErrors[j].URL
@@ -242,7 +255,7 @@ func (s *Site) settingsHandler(w http.ResponseWriter, r *http.Request) {
 	userPreferences := user_preferences.GetUserPreferences(s.db, s.db.GetUserID(username))
 
 	data := struct {
-		UrlsAndErrors   []sqlite.FeedUrlWithError
+		UrlsAndErrors   []sqlite.FeedUrlForSettings
 		UserPreferences *user_preferences.UserPreferences
 	}{
 		UrlsAndErrors:   urlsAndErrors,
@@ -670,4 +683,35 @@ func (s *Site) randomCutePhrase() string {
 	}
 	i := rand.Intn(len(phrases))
 	return phrases[i]
+}
+
+// apiSetFavoriteFeedHandler toggles the favorite status of a feed for the user.
+func (s *Site) apiSetFavoriteFeedHandler(w http.ResponseWriter, r *http.Request) {
+	if !s.loggedIn(r) {
+		s.renderErr("apiToggleFavoriteFeedHandler", w, "", http.StatusUnauthorized)
+		return
+	}
+
+	feedUrlEncoded := r.PathValue("feedUrl")
+	if feedUrlEncoded == "" {
+		s.renderErr("apiToggleFavoriteFeedHandler", w, "Feed URL is required", http.StatusBadRequest)
+		return
+	}
+
+	feedUrl, err := url.QueryUnescape(feedUrlEncoded)
+	if err != nil {
+		s.renderErr("apiToggleFavoriteFeedHandler", w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	username := s.username(r)
+	isFavorite := r.FormValue("new_is_favorite") == "true"
+
+	err = s.db.SetFeedFavoriteStatus(username, feedUrl, isFavorite)
+	if err != nil {
+		s.renderErr("apiToggleFavoriteFeedHandler", w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }

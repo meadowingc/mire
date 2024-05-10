@@ -27,6 +27,17 @@
 	{{- if and .Data.RequestingOwnPage
 	(gt .Data.UserPreferences.NumUnreadPostsToShowInHomeScreen 0)
 	(gt (len .Data.OldestUnread) 0) -}}
+
+	{{- if gt (len .Data.FavoritesUnread) 0 -}}
+	<p class="puny" style="margin-top: 2em;">Displaying {{len .Data.FavoritesUnread}} unread posts from favorite feeds</p>
+	<ul id="favorite-feeds-container">
+	    {{ range .Data.FavoritesUnread }}
+	    {{ template "list_item" . }}
+	    {{ end }}
+	</ul>
+	<hr />
+	{{- end -}}
+
 	<p class="puny" style="margin-top: 2em;">Displaying {{len .Data.OldestUnread}} oldest unread posts from timeline</p>
 	<ul>
 		{{ range .Data.OldestUnread }}
@@ -49,9 +60,16 @@
 
 
 <script>
+    // Placeholder function to refresh the favorite feeds list
+    function refreshFavoriteFeeds() {
+        // You will need to implement the logic to fetch the unread posts from favorite feeds and update the UI accordingly.
+        // For now, this is just a placeholder function.
+        console.log('Refreshing favorite feeds...');
+    }
+
 	(function () {
 		document.getElementById("loading-indicator").style.display = "none";
-		
+
 		refreshUnreadCounter();
 	})();
 
