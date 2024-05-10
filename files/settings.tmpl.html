@@ -1,6 +1,16 @@
 {{ define "settings" }}
 {{ template "head" . }}
 {{ template "nav" . }}
+<style>
+  a.favorite-link::before {
+    content: "🌕";
+  }
+
+  a.not-favorite-link::before {
+    content: "🌑";
+  }
+</style>
+
 <main class="content-page">
   <h3>Settings</h3>
   <p>your public url: <a style="word-wrap: break-word;" href="/u/{{ .Username }}">
@@ -91,14 +101,38 @@ https://www.visakanv.com/feed/
   </pre>
   {{ else if gt $length 0 }}
   <p>feed details</p>
+  <p class="puny" style="margin-top: 2em;">Click on the little moon next to each feed to toggle it's <i>favorite</i> status.</p>
   {{ end }}
   <pre>
 {{ range .Data.UrlsAndErrors -}}
 {{- $hasError := ne .Error "" -}}
-<a href="/feeds/{{ .URL | escapeURL }}">{{ .URL }}</a> {{ if $hasError }}<span title="{{ .Error }}"
-  style="cursor: pointer;">⚠️</span>{{ end }}
+{{- $isFavorite :=  .IsFavorite }}
+<a href="javascript:void(0);" onclick="toggleFavoriteFeed('{{ .URL }}', this)" title="Toggle favorite feed" class="{{- if $isFavorite -}}favorite-link{{- else -}}not-favorite-link{{- end -}}"></a> <a href="/feeds/{{ .URL | escapeURL }}">{{ .URL }}</a> {{ if $hasError }}<span title="{{ .Error }}"  style="cursor: pointer;">⚠️</span>{{ end }}
 {{ end -}}
   </pre>
 </main>
+
+<script>
+  function toggleFavoriteFeed(feedUrl, element) {
+    let newFeedFavoriteStatus = true;
+    if (element.className === "favorite-link") {
+      element.className = "not-favorite-link";
+      newFeedFavoriteStatus = false; // changing to non-favorite
+    } else {
+      element.className = "favorite-link";
+      newFeedFavoriteStatus = true; // changing to favorite
+    }
+    
+    const encodedFeed = encodeURIComponent(feedUrl)
+		return fetch(`/api/v1/toggle-favorite-feed-status/${encodedFeed}`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/x-www-form-urlencoded"
+			},
+			body: `new_is_favorite=${encodeURIComponent(newFeedFavoriteStatus)}`
+		});
+  }
+</script>
+
 {{ template "tail" . }}
 {{ end }}

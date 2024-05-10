@@ -206,13 +206,12 @@ func (db *DB) Subscribe(username string, feedURL string) {
 	uid := db.GetUserID(username)
 	fid := db.GetFeedID(feedURL)
 
+	// Default is_favorite to false when subscribing to a new feed
 	var id int
-
 	err := db.sql.QueryRow("SELECT id FROM subscribe WHERE user_id=? AND feed_id=?", uid, fid).Scan(&id)
-
 	if err == sql.ErrNoRows {
 		lock()
-		_, err := db.sql.Exec("INSERT INTO subscribe (user_id, feed_id) VALUES (?, ?)", uid, fid)
+		_, err := db.sql.Exec("INSERT INTO subscribe (user_id, feed_id, is_favorite) VALUES (?, ?, ?)", uid, fid, false)
 		unlock()
 
 		if err != nil {
@@ -223,6 +222,59 @@ func (db *DB) Subscribe(username string, feedURL string) {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+// SetFeedFavoriteStatus toggles the favorite status of a feed for a user.
+func (db *DB) SetFeedFavoriteStatus(username string, feedURL string, isFavorite bool) error {
+	userId := db.GetUserID(username)
+	feedId := db.GetFeedID(feedURL)
+
+	lock()
+	defer unlock()
+
+	_, err := db.sql.Exec("UPDATE subscribe SET is_favorite=? WHERE user_id=? AND feed_id=?", isFavorite, userId, feedId)
+	return err
+}
+
+// GetFavoriteUnreadPosts fetches unread posts from favorite feeds for a user.
+func (db *DB) GetFavoriteUnreadPosts(username string, limit int) ([]*UserPostEntry, error) {
+	userId := db.GetUserID(username)
+	rows, err := db.sql.Query(`
+		SELECT p.title, p.url, p.published_at, pr.has_read
+		FROM post p
+		JOIN feed f ON p.feed_id = f.id
+		JOIN subscribe s ON f.id = s.feed_id
+		JOIN user u ON s.user_id = u.id
+		LEFT JOIN post_read pr ON p.id = pr.post_id AND u.id = pr.user_id
+		WHERE u.id = ? AND s.is_favorite = 1 AND (pr.has_read IS NULL OR pr.has_read = 0)
+		ORDER BY p.published_at DESC
+		LIMIT ?`, userId, limit)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return []*UserPostEntry{}, nil
+		} else {
+			return nil, err
+		}
+	}
+	defer rows.Close()
+
+	var favoriteUnreadPosts []*UserPostEntry
+	for rows.Next() {
+		var entry UserPostEntry
+		var p gofeed.Item
+		var hasRead sql.NullBool
+		err = rows.Scan(&p.Title, &p.Link, &p.PublishedParsed, &hasRead)
+		if err != nil {
+			return nil, err
+		}
+
+		entry.Post = &p
+		entry.IsRead = hasRead.Valid && hasRead.Bool // IsRead is true if hasRead is not NULL and is true
+
+		favoriteUnreadPosts = append(favoriteUnreadPosts, &entry)
+	}
+
+	return favoriteUnreadPosts, nil
 }
 
 func (db *DB) UnsubscribeAll(username string) {
@@ -318,38 +370,44 @@ func (db *DB) GetUserFeedURLs(username string) []string {
 	return urls
 }
 
-type FeedUrlWithError struct {
-	URL   string
-	Error string
+type FeedUrlForSettings struct {
+	URL        string
+	Error      string
+	IsFavorite bool
 }
 
-func (db *DB) GetUserFeedURLsWithFetchErrors(username string) []FeedUrlWithError {
+func (db *DB) GetUserFeedURLsForSettings(username string) []FeedUrlForSettings {
 	uid := db.GetUserID(username)
 
 	rows, err := db.sql.Query(`
-		SELECT f.url, f.fetch_error
+		SELECT f.url, f.fetch_error, s.is_favorite
 		FROM feed f
 		JOIN subscribe s ON f.id = s.feed_id
 		JOIN user u ON s.user_id = u.id
 		WHERE u.id = ?`, uid)
 	if err == sql.ErrNoRows {
-		return []FeedUrlWithError{}
+		return []FeedUrlForSettings{}
 	}
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer rows.Close()
 
-	var feedErrors []FeedUrlWithError
+	var feedErrors []FeedUrlForSettings
 	for rows.Next() {
-		var feedError FeedUrlWithError
+		var feedError FeedUrlForSettings
 		var fetchError sql.NullString
-		err = rows.Scan(&feedError.URL, &fetchError)
+		var isFavorite sql.NullBool
+
+		err = rows.Scan(&feedError.URL, &fetchError, &isFavorite)
 		if err != nil {
 			log.Fatal(err)
 		}
 		if fetchError.Valid {
 			feedError.Error = fetchError.String
+		}
+		if isFavorite.Valid {
+			feedError.IsFavorite = isFavorite.Bool
 		}
 		feedErrors = append(feedErrors, feedError)
 	}
