@@ -247,7 +247,7 @@ func (db *DB) GetFavoriteUnreadPosts(username string, limit int) ([]*UserPostEnt
 		JOIN user u ON s.user_id = u.id
 		LEFT JOIN post_read pr ON p.id = pr.post_id AND u.id = pr.user_id
 		WHERE u.id = ? AND s.is_favorite = 1 AND (pr.has_read IS NULL OR pr.has_read = 0)
-		ORDER BY p.published_at DESC
+		ORDER BY p.published_at ASC
 		LIMIT ?`, userId, limit)
 	if err != nil {
 		if err == sql.ErrNoRows {
