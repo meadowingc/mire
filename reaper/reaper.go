@@ -258,7 +258,7 @@ func (r *Reaper) refreshAllFeeds() {
 }
 
 func (r *Reaper) handleFeedFetchFailure(url string, err error) {
-	log.Printf("[err] reaper: fetch failure '%s': %s\n", url, err)
+	log.Printf("[warning] reaper: fetch failure '%s': %s\n", url, err)
 	err = r.db.SetFeedFetchError(url, err.Error())
 	if err != nil {
 		log.Printf("[err] reaper: could not set feed fetch error '%s'\n", err)
