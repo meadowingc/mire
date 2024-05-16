@@ -5,6 +5,7 @@ import (
 	"log"
 	"math/rand"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -204,14 +205,9 @@ func (r *Reaper) updateFeedAndSaveNewItemsToDb(fh *FeedHolder) {
 		r.AddFeedStub(newF.FeedLink)
 	}
 
-	fetchTime := time.Now()
 	lock()
-	r.feeds[newF.FeedLink].LastFetched = fetchTime
 	r.feeds[newF.FeedLink].Feed = newF
 	unlock()
-
-	// update fetch time in DB
-	r.db.UpdateFeedLastRefreshTime(newF.FeedLink, fetchTime)
 
 	newItems := []*gofeed.Item{}
 	for _, item := range newF.Items {
@@ -271,10 +267,16 @@ func (r *Reaper) refreshAllFeeds() {
 }
 
 func (r *Reaper) handleFeedFetchFailure(url string, err error) {
-	log.Printf("[warning] reaper: fetch failure '%s': %s\n", url, err)
+	_, file, line, ok := runtime.Caller(1)
+	callerInfo := ""
+	if ok {
+		callerInfo = fmt.Sprintf(" (called from %s:%d)", file, line)
+	}
+
+	log.Printf("[warning] reaper: fetch failure '%s': %s%s\n", url, err, callerInfo)
 	err = r.db.SetFeedFetchError(url, err.Error())
 	if err != nil {
-		log.Printf("[err] reaper: could not set feed fetch error '%s'\n", err)
+		log.Printf("[err] reaper: could not set feed fetch error '%s'%s\n", err, callerInfo)
 	}
 }
 
