@@ -340,13 +340,28 @@ func (s *Site) settingsSubscribeHandler(w http.ResponseWriter, r *http.Request) 
 
 	wg.Wait() // wait for all goroutines to finish
 
-	// subscribe to all listed feeds exclusively
-	s.db.UnsubscribeAll(s.username(r))
-	for _, url := range validatedURLs {
-		s.db.Subscribe(s.username(r), url)
+	// TODO: the below is convoluted and can definitely be improved
+
+	username := s.username(r)
+	userOldFeeds := s.db.GetUserFeedURLsForSettings(username)
+
+	userOldFeedsMap := make(map[string]sqlite.FeedUrlForSettings)
+	for _, oldFeed := range userOldFeeds {
+		userOldFeedsMap[oldFeed.URL] = oldFeed
 	}
 
-	s.db.DeleteOrphanedPostReads(s.username(r))
+	// subscribe to all listed feeds exclusively
+	s.db.UnsubscribeAll(username)
+	for _, url := range validatedURLs {
+		s.db.Subscribe(username, url)
+
+		// If the user was previously "favoriting" this feed, preserve favorite status
+		if oldFeed, ok := userOldFeedsMap[url]; ok && oldFeed.IsFavorite {
+			s.db.SetFeedFavoriteStatus(username, url, oldFeed.IsFavorite)
+		}
+	}
+
+	s.db.DeleteOrphanedPostReads(username)
 	orphanedFeeds := s.db.DeleteOrphanFeeds()
 	for _, feedUrl := range orphanedFeeds {
 		s.reaper.RemoveFeed(feedUrl)
