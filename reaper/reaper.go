@@ -152,6 +152,19 @@ func (r *Reaper) sanitizeFeedItems(feed *gofeed.Feed) {
 func (r *Reaper) updateFeedAndSaveNewItemsToDb(fh *FeedHolder) {
 	f := fh.Feed
 
+	if _, ok := r.feeds[f.FeedLink]; !ok {
+		log.Printf("[err] reaper:updateFeedAndSaveNewItemsToDb → Tied to fetch a feed that is not known to Reaper")
+		return
+	}
+
+	// refresh last attempted refresh time for feed, independently of whether
+	// the fetch succeeds or not
+	fetchTime := time.Now()
+	lock()
+	r.feeds[f.FeedLink].LastFetched = fetchTime
+	unlock()
+	r.db.UpdateFeedLastRefreshTime(f.FeedLink, fetchTime)
+
 	originalItemsMap := make(map[string]*gofeed.Item)
 	for _, item := range f.Items {
 		originalItemsMap[item.Link] = item
