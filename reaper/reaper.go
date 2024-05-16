@@ -272,10 +272,13 @@ func (r *Reaper) handleFeedFetchFailure(url string, err error) {
 	pc, file, line, ok := runtime.Caller(1)
 	callerInfo := ""
 	if ok {
-		funcName := runtime.FuncForPC(pc).Name()
+		fullFuncName := runtime.FuncForPC(pc).Name()
+		parts := strings.Split(fullFuncName, ".")
+		lastPart := parts[len(parts)-1]             // get the last part, which is "(*Reaper).updateFeedAndSaveNewItemsToDb"
+		funcName := strings.Split(lastPart, "(")[0] // split on "(" and get the first part, which is the function name
 		cwd, _ := os.Getwd()
 		relativePath, _ := filepath.Rel(cwd, file)
-		callerInfo = fmt.Sprintf(" (called from %s:%d, function: %s)", relativePath, line, funcName)
+		callerInfo = fmt.Sprintf(" (called from %s#%s:%d)", relativePath, funcName, line)
 	}
 
 	log.Printf("[warning] reaper: fetch failure '%s': %s%s\n", url, err, callerInfo)
