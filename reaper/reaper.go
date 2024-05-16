@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"sort"
@@ -267,10 +269,13 @@ func (r *Reaper) refreshAllFeeds() {
 }
 
 func (r *Reaper) handleFeedFetchFailure(url string, err error) {
-	_, file, line, ok := runtime.Caller(1)
+	pc, file, line, ok := runtime.Caller(1)
 	callerInfo := ""
 	if ok {
-		callerInfo = fmt.Sprintf(" (called from %s:%d)", file, line)
+		funcName := runtime.FuncForPC(pc).Name()
+		cwd, _ := os.Getwd()
+		relativePath, _ := filepath.Rel(cwd, file)
+		callerInfo = fmt.Sprintf(" (called from %s:%d, function: %s)", relativePath, line, funcName)
 	}
 
 	log.Printf("[warning] reaper: fetch failure '%s': %s%s\n", url, err, callerInfo)
