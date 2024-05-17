@@ -89,7 +89,7 @@ func (r *Reaper) start() {
 
 	for {
 		r.refreshAllFeeds()
-		time.Sleep(1 * time.Hour)
+		time.Sleep(10 * time.Minute)
 	}
 }
 
