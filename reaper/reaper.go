@@ -180,6 +180,8 @@ func (r *Reaper) updateFeedAndSaveNewItemsToDb(fh *FeedHolder) {
 		return
 	}
 
+	newF.FeedLink = f.FeedLink // sometimes this gets overwritten for some reason
+
 	// otherwise tell the DB that we successfully fetched the feed
 	err = r.db.SetFeedFetchError(f.FeedLink, "")
 	if err != nil {
@@ -196,8 +198,6 @@ func (r *Reaper) updateFeedAndSaveNewItemsToDb(fh *FeedHolder) {
 			newF.PublishedParsed = &parsedDate
 		}
 	}
-
-	newF.FeedLink = f.FeedLink // sometimes this gets overwritten for some reason
 
 	if !r.HasFeed(newF.FeedLink) {
 		// NOTE: this should never happen, but if it does, we should add the
