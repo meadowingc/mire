@@ -75,7 +75,7 @@ func buildRouter(s *Site) *chi.Mux {
 	router.Get("/u/{username}", s.userHandler)
 	router.Get("/u/{username}/blogroll", s.userBlogrollHandler)
 	router.Get("/static/{file}", s.staticHandler)
-	router.Get("/global", s.globalHandler)
+	router.Get("/discover", s.discoverHandler)
 	router.Get("/random", s.visitRandomPostHandler)
 	router.Get("/settings", s.settingsHandler)
 	router.Post("/settings/subscribe", s.settingsSubscribeHandler)
@@ -93,6 +93,11 @@ func buildRouter(s *Site) *chi.Mux {
 	router.Get("/api/v1/ping", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("pong"))
+	})
+
+	// legacy redirects
+	router.Get("/global", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/discover", http.StatusMovedPermanently)
 	})
 
 	return router

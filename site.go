@@ -83,12 +83,12 @@ func (s *Site) indexHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Site) aboutHandler(w http.ResponseWriter, r *http.Request) {
-	s.renderPage(w, r, "about", globalStats)
+	s.renderPage(w, r, "about", globalSiteStats)
 }
 
-func (s *Site) globalHandler(w http.ResponseWriter, r *http.Request) {
-	items := s.db.GetLatestPostsForGlobal(100)
-	s.renderPage(w, r, "global", items)
+func (s *Site) discoverHandler(w http.ResponseWriter, r *http.Request) {
+	items := s.db.GetLatestPostsForDiscover(100)
+	s.renderPage(w, r, "discover", items)
 }
 
 func (s *Site) loginHandler(w http.ResponseWriter, r *http.Request) {

@@ -30,7 +30,7 @@ func TestPostsOps(t *testing.T) {
 	db.SavePostStruct(testFeedUrl, testPost)
 	db.SavePost(testFeedUrl, "Test Post 2", "https://example.com/2", time.Now())
 
-	latest := db.GetLatestPostsForGlobal(10)
+	latest := db.GetLatestPostsForDiscover(10)
 	if len(latest) != 2 {
 		t.Errorf("Expected 2 posts, got %d", len(latest))
 	}
