@@ -583,7 +583,7 @@ func (db *DB) GetPostId(postUrl, username string) int {
 	return pid
 }
 
-func (db *DB) GetLatestPostsForGlobal(limit int) []*Post {
+func (db *DB) GetLatestPostsForDiscover(limit int) []*Post {
 	query := `
         SELECT title, url, MAX(published_at) as published_at
         FROM post

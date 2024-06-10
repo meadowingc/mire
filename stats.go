@@ -9,14 +9,14 @@ type MireSiteStats struct {
 	NumUniqueFeeds int
 }
 
-var globalStats *MireSiteStats = &MireSiteStats{}
+var globalSiteStats *MireSiteStats = &MireSiteStats{}
 
 func statsCalculatorProcess(s *Site) {
 	for {
-		globalStats.LastComputed = time.Now()
-		globalStats.NumReadPosts = s.db.GetGlobalNumReadPosts()
-		globalStats.NumUniqueFeeds = s.db.GetGlobalNumUniqueFeeds()
-		globalStats.TotalUsers = s.db.GetGlobalNumUsers()
+		globalSiteStats.LastComputed = time.Now()
+		globalSiteStats.NumReadPosts = s.db.GetGlobalNumReadPosts()
+		globalSiteStats.NumUniqueFeeds = s.db.GetGlobalNumUniqueFeeds()
+		globalSiteStats.TotalUsers = s.db.GetGlobalNumUsers()
 
 		time.Sleep(6 * time.Hour)
 	}
