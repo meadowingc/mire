@@ -112,6 +112,12 @@ func (r *Reaper) sanitizeFeedItems(feed *gofeed.Feed) {
 	for _, item := range feed.Items {
 		// collapse all whitespace and newlines to a single whitespace in item title
 		item.Title = whitespaceRegexp.ReplaceAllString(item.Title, " ")
+		item.Title = strings.TrimSpace(item.Title)
+
+		// if the item doesn't have a title, we just set it to "[untitled]"
+		if item.Title == "" {
+			item.Title = "[untitled]"
+		}
 
 		// strip whitespaces in item link
 		item.Link = strings.TrimSpace(item.Link)
@@ -155,6 +161,7 @@ func (r *Reaper) sanitizeFeedItems(feed *gofeed.Feed) {
 func (r *Reaper) updateFeedAndSaveNewItemsToDb(fh *FeedHolder) {
 	f := fh.Feed
 
+	// TODO don't read from reaper, read from db
 	if _, ok := r.feeds[f.FeedLink]; !ok {
 		log.Printf("[err] reaper:updateFeedAndSaveNewItemsToDb → Tied to fetch a feed that is not known to Reaper")
 		return
