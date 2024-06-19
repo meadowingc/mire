@@ -29,7 +29,8 @@
 	(gt (len .Data.OldestUnread) 0) -}}
 
 	{{- if gt (len .Data.FavoritesUnread) 0 -}}
-	<p class="puny" style="margin-top: 2em;">Displaying {{len .Data.FavoritesUnread}} unread posts from favorite feeds</p>
+	<p class="puny" style="margin-top: 2em;">Displaying {{len .Data.FavoritesUnread}} unread posts from favorite feeds
+	</p>
 	<ul id="favorite-feeds-container">
 		{{ range .Data.FavoritesUnread }}
 		{{ template "list_item" . }}
@@ -95,20 +96,24 @@
 		const allSameUrlElements = Array
 			.from(document.querySelectorAll(`a[href='${titleElement.href}']`))
 			.map(linkHolderElement => {
-				return linkHolderElement.parentElement.querySelectorAll("a")[0];
+				const anchors = linkHolderElement.parentElement.querySelectorAll("a");
+				return {
+					emojiHolder: anchors[0],
+					title: anchors[1],
+				};
 			});
 
-		allSameUrlElements.forEach(el => {
-			el.className = newReadStatus ? "read" : "unread";
-			el.innerText = newReadStatus ? "📜" : "💌";
+		allSameUrlElements.forEach(els => {
+			els.title.className = newReadStatus ? "read" : "unread";
+			els.emojiHolder.innerText = newReadStatus ? "📜" : "💌";
 		});
 
 		setReadStatus(postUrl, newReadStatus).then(function (response) {
 			if (response.status !== 200) {
 				// undo the change
-				allSameUrlElements.forEach(el => {
-					el.className = isRead ? "read" : "unread";
-					el.innerText = isRead ? "📜" : "💌";
+				allSameUrlElements.forEach(els => {
+					els.title.className = isRead ? "read" : "unread";
+					els.emojiHolder.innerText = isRead ? "📜" : "💌";
 				});
 			}
 
