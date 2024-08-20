@@ -370,7 +370,7 @@ func (r *Reaper) rawFetchFeed(url string) (*gofeed.Feed, error) {
 	// with subscriber stats.
 	// https://www.lesswrong.com/posts/djn3nJnnHYX7tReFa/looking-at-rss-user-agents
 	numSubscribersForFeed := r.db.GetNumSubscribersForFeed(url)
-	fp.UserAgent = fmt.Sprintf("Mire (+https://mire.meadowing.club) - %d subscribers", numSubscribersForFeed)
+	fp.UserAgent = fmt.Sprintf("Mire (+https://mire.meadow.cafe) - %d subscribers", numSubscribersForFeed)
 
 	return fp.ParseURL(url)
 }
