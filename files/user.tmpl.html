@@ -145,9 +145,13 @@
 		// Always mark the post as read
 		await setReadStatus(postUrl, true);
 
-		if (event.ctrlKey || event.metaKey) {
+	    const openInNewTab = {{ if .Data.UserPreferences.OpenLinksInNewTab }}true{{ else }}false{{ end }};
+		if (openInNewTab || event.ctrlKey || event.metaKey) {
 			// Ctrl or Cmd was pressed, open the link in a new tab, which is the default behavior
 			window.open(element.href, "_blank");
+
+			// now that the link was opened in a new tab, we can hide the loading indicator
+			document.getElementById("loading-indicator").style.display = "none";
 		} else {
 			// Ctrl or Cmd was not pressed, navigate to the link in the current tab
 			window.location.href = element.href;

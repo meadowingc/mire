@@ -429,13 +429,17 @@ func (s *Site) settingsPreferencesHandler(w http.ResponseWriter, r *http.Request
 
 		// `tag` is the expected form name
 		newValueForField := r.FormValue(tag)
-		if newValueForField == "" {
-			e := fmt.Sprintf("no value passed for the required field '%s'", tag)
-			s.renderErr("settingsPreferencesHandler", w, e, http.StatusBadRequest)
-			return
+		if val.Field(i).Kind() == reflect.Bool {
+			// Checkboxes return "on" if checked, otherwise they are not included in the form data
+			val.Field(i).SetBool(newValueForField == "on")
+		} else {
+			if newValueForField == "" {
+				e := fmt.Sprintf("no value passed for the required field '%s'", tag)
+				s.renderErr("settingsPreferencesHandler", w, e, http.StatusBadRequest)
+				return
+			}
+			user_preferences.SetFieldValue(val.Field(i), newValueForField)
 		}
-
-		user_preferences.SetFieldValue(val.Field(i), newValueForField)
 	}
 
 	// validate newPreferences

@@ -73,6 +73,14 @@
         </select>
       </div>
       <br />
+
+      <!-- openLinksInNewTab -->
+      <div>
+        <label for="openLinksInNewTab">Open links in a new tab:</label>
+        <input type="checkbox" name="openLinksInNewTab" id="openLinksInNewTab" {{ if $up.OpenLinksInNewTab }}checked{{ end }}>
+      </div>
+      <br />
+      
       <br />
       <input type="submit" value="Save Preferences">
     </form>

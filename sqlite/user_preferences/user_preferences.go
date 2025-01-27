@@ -9,8 +9,9 @@ import (
 )
 
 type UserPreferences struct {
-	NumPostsToShowInHomeScreen       int `db:"numPostsToShowInHomeScreen" default:"300"`
-	NumUnreadPostsToShowInHomeScreen int `db:"numUnreadPostsToShowInHomeScreen" default:"7"`
+	NumPostsToShowInHomeScreen       int  `db:"numPostsToShowInHomeScreen" default:"300"`
+	NumUnreadPostsToShowInHomeScreen int  `db:"numUnreadPostsToShowInHomeScreen" default:"7"`
+	OpenLinksInNewTab                bool `db:"openLinksInNewTab" default:"false"`
 }
 
 func SetFieldValue(field reflect.Value, value string) {
