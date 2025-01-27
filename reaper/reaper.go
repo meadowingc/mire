@@ -79,7 +79,8 @@ func (r *Reaper) start() {
 			FeedLink: url,
 		}
 
-		lastRefreshed := r.db.GetFeedLastRefreshTime(feed.FeedLink)
+		// trigged immediate refresh by setting LastFetched to a time in the past
+		lastRefreshed := time.Now().Add(-timeToBecomeStale)
 		r.feeds[url] = &FeedHolder{
 			Feed:        feed,
 			LastFetched: lastRefreshed,

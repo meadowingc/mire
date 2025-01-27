@@ -3,7 +3,7 @@
 {{ template "head" . }}
 {{ template "nav" . }}
 
-<h3><a href="{{ .Data.Feed.FeedLink }}">{{ .Data.Feed.FeedLink }}</a></h3>
+<h3><a href="{{ .Data.Feed.Link }}">{{ .Data.Feed.Link | printDomain }}</a></h3>
 
 <div>Title: {{ .Data.Feed.Title }}</div>
 <div>Description: {{ .Data.Feed.Description }}</div>
