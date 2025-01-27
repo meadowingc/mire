@@ -370,6 +370,44 @@ func (s *Site) settingsSubscribeHandler(w http.ResponseWriter, r *http.Request) 
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 
+func (s *Site) changePasswordHandler(w http.ResponseWriter, r *http.Request) {
+	if !s.loggedIn(r) {
+		s.renderErr("changePasswordHandler", w, "", http.StatusUnauthorized)
+		return
+	}
+
+	username := s.username(r)
+	currentPassword := r.FormValue("currentPassword")
+	newPassword := r.FormValue("newPassword")
+	confirmNewPassword := r.FormValue("confirmNewPassword")
+
+	if newPassword != confirmNewPassword {
+		s.renderErr("changePasswordHandler", w, "New passwords do not match", http.StatusBadRequest)
+		return
+	}
+
+	storedPassword := s.db.GetPassword(username)
+	err := bcrypt.CompareHashAndPassword([]byte(storedPassword), []byte(currentPassword))
+	if err != nil {
+		s.renderErr("changePasswordHandler", w, "Current password is incorrect", http.StatusUnauthorized)
+		return
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		s.renderErr("changePasswordHandler", w, "Failed to hash new password", http.StatusInternalServerError)
+		return
+	}
+
+	err = s.db.UpdatePassword(username, string(hashedPassword))
+	if err != nil {
+		s.renderErr("changePasswordHandler", w, "Failed to update password", http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+}
+
 func (s *Site) settingsPreferencesHandler(w http.ResponseWriter, r *http.Request) {
 	if !s.loggedIn(r) {
 		s.renderErr("settingsPreferencesHandler", w, "", http.StatusUnauthorized)

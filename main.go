@@ -79,6 +79,7 @@ func buildRouter(s *Site) *chi.Mux {
 	router.Get("/random", s.visitRandomPostHandler)
 	router.Get("/settings", s.settingsHandler)
 	router.Post("/settings/subscribe", s.settingsSubscribeHandler)
+	router.Post("/settings/change-password", s.changePasswordHandler)
 	router.Post("/settings/preferences", s.settingsPreferencesHandler)
 	router.Get("/login", s.loginHandler)
 	router.Post("/login", s.loginHandler)

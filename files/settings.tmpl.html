@@ -25,6 +25,29 @@
 
   <br />
   <hr />
+  <section id="change-password">
+    <h4>Change Password</h4>
+    <form method="POST" action="/settings/change-password">
+      <div>
+        <label for="currentPassword">Current Password:</label>
+        <input type="password" name="currentPassword" id="currentPassword" required>
+      </div>
+      <br />
+      <div>
+        <label for="newPassword">New Password:</label>
+        <input type="password" name="newPassword" id="newPassword" required>
+      </div>
+      <br />
+      <div>
+        <label for="confirmNewPassword">Confirm New Password:</label>
+        <input type="password" name="confirmNewPassword" id="confirmNewPassword" required>
+      </div>
+      <br />
+      <input type="submit" value="Change Password">
+    </form>
+  </section>
+  <br />
+  <hr />
   <section id="user-preferences">
     <h4>User Preferences</h4>
     <form method="POST" action="/settings/preferences">

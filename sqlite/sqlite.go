@@ -855,3 +855,10 @@ func (db *DB) UpdateFeedLastRefreshTime(feedURL string, lastRefreshed time.Time)
 		log.Printf("UpdateLastRefreshTime:: Error updating last refresh time for feed %s: %v", feedURL, err)
 	}
 }
+
+func (db *DB) UpdatePassword(username string, newPassword string) error {
+	lock()
+	_, err := db.sql.Exec("UPDATE user SET password=? WHERE username=?", newPassword, username)
+	unlock()
+	return err
+}
