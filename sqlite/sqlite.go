@@ -27,8 +27,9 @@ type Post struct {
 }
 
 type UserPostEntry struct {
-	Post   *gofeed.Item
-	IsRead bool
+	Post    *gofeed.Item
+	IsRead  bool
+	FeedURL string
 }
 
 var listOfSpammyFeeds = []string{
@@ -652,7 +653,7 @@ func (db *DB) GetPostsForUser(username string, limit int) []*UserPostEntry {
 	uid := db.GetUserID(username)
 
 	rows, err := db.sql.Query(`
-        SELECT p.title, p.url, p.published_at, pr.has_read
+        SELECT p.title, p.url, p.published_at, pr.has_read, f.url
         FROM post p
         JOIN feed f ON p.feed_id = f.id
         JOIN subscribe s ON f.id = s.feed_id
@@ -670,12 +671,14 @@ func (db *DB) GetPostsForUser(username string, limit int) []*UserPostEntry {
 		var entry UserPostEntry
 		var p gofeed.Item
 		var hasRead sql.NullBool
-		err = rows.Scan(&p.Title, &p.Link, &p.PublishedParsed, &hasRead)
+		var feedURL string
+		err = rows.Scan(&p.Title, &p.Link, &p.PublishedParsed, &hasRead, &feedURL)
 		if err != nil {
 			log.Fatal(err)
 		}
 
 		entry.Post = &p
+		entry.FeedURL = feedURL
 		entry.IsRead = hasRead.Valid && hasRead.Bool // IsRead is true if hasRead is not NULL and is true
 
 		userPostsEntries = append(userPostsEntries, &entry)

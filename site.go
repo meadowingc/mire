@@ -639,7 +639,17 @@ func (s *Site) renderPage(w http.ResponseWriter, r *http.Request, page string, d
 func (s *Site) printDomain(rawURL string) string {
 	parsedURL, err := url.Parse(rawURL)
 	if err == nil {
-		return parsedURL.Hostname()
+		hostname := parsedURL.Hostname()
+		if hostname == "medium.com" || strings.HasSuffix(hostname, ".medium.com") {
+			// Handle Medium URLs
+			pathSegments := strings.Split(parsedURL.Path, "/")
+			for _, segment := range pathSegments {
+				if len(segment) > 0 && segment[0] == '@' {
+					return "medium.com/" + segment
+				}
+			}
+		}
+		return hostname
 	}
 	// do our best to trim it manually if url parsing fails
 	trimmedStr := strings.TrimSpace(rawURL)
