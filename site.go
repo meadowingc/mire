@@ -480,9 +480,11 @@ func (s *Site) feedDetailsHandler(w http.ResponseWriter, r *http.Request) {
 
 	feedData := struct {
 		Feed         *gofeed.Feed
+		Posts        []*sqlite.Post
 		FetchFailure string
 	}{
 		Feed:         s.reaper.GetFeed(decodedURL),
+		Posts:        s.db.GetPostsForFeed(decodedURL),
 		FetchFailure: fetchErr,
 	}
 

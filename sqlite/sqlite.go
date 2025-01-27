@@ -23,6 +23,7 @@ type DB struct {
 type Post struct {
 	Title             string
 	URL               string
+	FeedURL           string
 	PublishedDatetime time.Time
 }
 
@@ -586,8 +587,9 @@ func (db *DB) GetPostId(postUrl, username string) int {
 
 func (db *DB) GetLatestPostsForDiscover(limit int) []*Post {
 	query := `
-        SELECT title, url, MAX(published_at) as published_at
-        FROM post
+        SELECT p.title, p.url, MAX(p.published_at) as published_at, f.url
+        FROM post p
+        JOIN feed f ON p.feed_id = f.id
         WHERE `
 
 	// Add a 'NOT LIKE' clause for each item in the exclusion list
@@ -595,12 +597,12 @@ func (db *DB) GetLatestPostsForDiscover(limit int) []*Post {
 		if i > 0 {
 			query += " AND "
 		}
-		query += fmt.Sprintf("url NOT LIKE '%%%s%%'", url)
+		query += fmt.Sprintf("p.url NOT LIKE '%%%s%%'", url)
 	}
 
 	query += `
-        GROUP BY url
-        ORDER BY published_at DESC
+        GROUP BY p.url
+        ORDER BY p.published_at DESC
         LIMIT ?`
 
 	rows, err := db.sql.Query(query, limit)
@@ -613,7 +615,7 @@ func (db *DB) GetLatestPostsForDiscover(limit int) []*Post {
 	for rows.Next() {
 		var p Post
 		var publishedTime string
-		err = rows.Scan(&p.Title, &p.URL, &publishedTime)
+		err = rows.Scan(&p.Title, &p.URL, &publishedTime, &p.FeedURL)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -631,7 +633,11 @@ func (db *DB) GetLatestPostsForDiscover(limit int) []*Post {
 func (db *DB) GetPostsForFeed(feedUrl string) []*Post {
 	feedId := db.GetFeedID(feedUrl)
 
-	rows, err := db.sql.Query("SELECT title, url, published_at FROM post WHERE feed_id=?", feedId)
+	rows, err := db.sql.Query(`
+        SELECT p.title, p.url, p.published_at, f.url
+        FROM post p
+        JOIN feed f ON p.feed_id = f.id
+        WHERE feed_id=?`, feedId)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -640,7 +646,7 @@ func (db *DB) GetPostsForFeed(feedUrl string) []*Post {
 	var posts []*Post
 	for rows.Next() {
 		var p Post
-		err = rows.Scan(&p.Title, &p.URL, &p.PublishedDatetime)
+		err = rows.Scan(&p.Title, &p.URL, &p.PublishedDatetime, &p.FeedURL)
 		if err != nil {
 			log.Fatal(err)
 		}

@@ -1,4 +1,5 @@
 {{ define "feedDetails" }}
+
 {{ template "head" . }}
 {{ template "nav" . }}
 
@@ -11,13 +12,13 @@
 
 <h4>Feed Items</h4>
 
-<p>{{ len .Data.Feed.Items }} Items:</p>
+<p>{{ len .Data.Posts }} Items:</p>
 
-{{ range .Data.Feed.Items }}
+{{ range .Data.Posts }}
 <details>
     <summary>{{ .Title }}</summary>
-    <div>Date: {{ .PublishedParsed }}</div>
-    <div>Link: <a href="{{ .Link }}">{{ .Link }}</a></div>
+    <div>Date: {{ .PublishedDatetime }}</div>
+    <div>Link: <a href="{{ .URL }}">{{ .URL }}</a></div>
     <br/>
 </details>
 {{ end }}

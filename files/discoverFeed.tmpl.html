@@ -22,7 +22,7 @@
             </a>
             <br>
             <span class=puny title="{{ .PublishedDatetime }}">published {{ .PublishedDatetime | timeSince }} via <a
-                    href="//{{ .URL | printDomain }}">{{ .URL | printDomain }}</a></span>
+                    href="/feeds/{{ .FeedURL | escapeURL }}">{{ .FeedURL | printDomain }}</a></span>
 
         </li>
         {{ end }}
