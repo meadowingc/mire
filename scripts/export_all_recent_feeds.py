@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 
 
 def normalize_feed_url(feed_url):
-    feed_url = feed_url.strip()
+    feed_url = feed_url.strip().lower()
     feed_url = feed_url.rstrip("/")
     feed_url = feed_url.rstrip("?")
     feed_url = feed_url.rstrip("&")
@@ -23,7 +23,6 @@ def normalize_feed_url(feed_url):
         feed_url = feed_url.split("?")[0]
         feed_url = feed_url.rstrip("/")
         feed_url = feed_url.replace("/rss", "/feed")
-
 
     return feed_url
 
