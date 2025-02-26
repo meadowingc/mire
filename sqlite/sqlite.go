@@ -34,14 +34,19 @@ type UserPostEntry struct {
 }
 
 var listOfSpammyFeeds = []string{
+	"anchor.fm",
 	"arstechnica.com",
 	"codeberg.org",
 	"crimethinc.com",
+	"f-droid.org",
 	"facebook.com",
 	"feedbin.com",
 	"feedburner.com",
+	"fetchrss.com",
+	"finshots.in",
 	"finshots.in",
 	"frame.work",
+	"granary.io",
 	"kagifeedback.org",
 	"lemonde.fr",
 	"longreads.com",
@@ -55,6 +60,7 @@ var listOfSpammyFeeds = []string{
 	"scotthyoung.com",
 	"sidebar.io",
 	"slashdot.org",
+	"status.cafe",
 	"theonion.com",
 	"thisiscolossal.com",
 	"vox.com",
