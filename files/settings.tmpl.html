@@ -1,104 +1,80 @@
 {{ define "settings" }}
 {{ template "head" . }}
 {{ template "nav" . }}
-<style>
-  a.favorite-link::before {
-    content: "🌕";
-  }
-
-  a.not-favorite-link::before {
-    content: "🌑";
-  }
-</style>
 
 <main class="content-page">
+  {{ $length := len .Data.UrlsAndErrors }}
+  
   <h3>Settings</h3>
-  <p>your public url: <a style="word-wrap: break-word;" href="/u/{{ .Username }}">
-      mire.meadow.cafe/u/{{ .Username }}
-    </a>
-  </p>
-  <p>you can view your (public) blogroll here:
-    <a style="word-wrap: break-word;" href="/u/{{ .Username }}/blogroll">
-      mire.meadow.cafe/u/{{ .Username }}/blogroll
-    </a>
-  </p>
+  
+  <p>your public url: <a href="/u/{{ .Username }}">mire.meadow.cafe/u/{{ .Username }}</a></p>
+  <p>you can view your (public) blogroll here: <a href="/u/{{ .Username }}/blogroll">mire.meadow.cafe/u/{{ .Username }}/blogroll</a></p>
 
-  <br />
-  <hr />
-  <section id="change-password">
-    <h4>Change Password</h4>
-    <form method="POST" action="/settings/change-password">
-      <div>
-        <label for="currentPassword">Current Password:</label>
-        <input type="password" name="currentPassword" id="currentPassword" required>
-      </div>
-      <br />
-      <div>
-        <label for="newPassword">New Password:</label>
-        <input type="password" name="newPassword" id="newPassword" required>
-      </div>
-      <br />
-      <div>
-        <label for="confirmNewPassword">Confirm New Password:</label>
-        <input type="password" name="confirmNewPassword" id="confirmNewPassword" required>
-      </div>
-      <br />
-      <input type="submit" value="Change Password">
-    </form>
-  </section>
-  <br />
-  <hr />
-  <section id="user-preferences">
-    <h4>User Preferences</h4>
-    <form method="POST" action="/settings/preferences">
-      {{ $up := .Data.UserPreferences }}
-
-      <!-- numUnreadPostsToShowInHomeScreen -->
-      <div>
-        <label for="numUnreadPostsToShowInHomeScreen">Number of unread posts to load in home screen (set to 0 to
-          disable):</label>
-        <input type="number" name="numUnreadPostsToShowInHomeScreen" id="numUnreadPostsToShowInHomeScreen"
-          value="{{ $up.NumUnreadPostsToShowInHomeScreen }}" max="20" min="0">
-      </div>
-      <br />
-
-      <!-- numPostsToShowInHomeScreen -->
-      <div>
-        <label for="numPostsToShowInHomeScreen">Number of posts to load in home screen:</label>
-        <select name="numPostsToShowInHomeScreen" id="numPostsToShowInHomeScreen">
-          {{ $numPostsOptions := makeSlice 50 100 150 200 300 }}
-          {{ range $numPostsOptions }}
-          <option value="{{ . }}" {{ if eq $up.NumPostsToShowInHomeScreen . }}selected{{ end }}>{{ . }}</option>
-          {{ end }}
-        </select>
-      </div>
-      <br />
-
-      <!-- openLinksInNewTab -->
-      <div>
-        <label for="openLinksInNewTab">Open links in a new tab:</label>
-        <input type="checkbox" name="openLinksInNewTab" id="openLinksInNewTab" {{ if $up.OpenLinksInNewTab }}checked{{ end }}>
-      </div>
-      <br />
-      
-      <br />
-      <input type="submit" value="Save Preferences">
-    </form>
-  </section>
-  <br />
   <hr />
 
-  <p>{{ len .Data.UrlsAndErrors }} subscriptions:</p>
+  <h4>Change Password</h4>
+  <form method="POST" action="/settings/change-password">
+    <div>
+      <label for="currentPassword">Current Password:</label>
+      <input type="password" name="currentPassword" id="currentPassword" required>
+    </div>
+    <br />
+    <div>
+      <label for="newPassword">New Password:</label>
+      <input type="password" name="newPassword" id="newPassword" required>
+    </div>
+    <br />
+    <div>
+      <label for="confirmNewPassword">Confirm New Password:</label>
+      <input type="password" name="confirmNewPassword" id="confirmNewPassword" required>
+    </div>
+    <br />
+    <input type="submit" value="Change Password">
+  </form>
+
+  <hr />
+
+  <h4>User Preferences</h4>
+  <form method="POST" action="/settings/preferences">
+    {{ $up := .Data.UserPreferences }}
+    
+    <div>
+      <label for="numUnreadPostsToShowInHomeScreen">Number of unread posts to load in home screen (set to 0 to disable):</label>
+      <input type="number" name="numUnreadPostsToShowInHomeScreen" id="numUnreadPostsToShowInHomeScreen"
+        value="{{ $up.NumUnreadPostsToShowInHomeScreen }}" max="20" min="0">
+    </div>
+    <br />
+
+    <div>
+      <label for="numPostsToShowInHomeScreen">Number of posts to load in home screen:</label>
+      <select name="numPostsToShowInHomeScreen" id="numPostsToShowInHomeScreen">
+        {{ $numPostsOptions := makeSlice 50 100 150 200 300 }}
+        {{ range $numPostsOptions }}
+        <option value="{{ . }}" {{ if eq $up.NumPostsToShowInHomeScreen . }}selected{{ end }}>{{ . }}</option>
+        {{ end }}
+      </select>
+    </div>
+    <br />
+
+    <div>
+      <label for="openLinksInNewTab">Open links in a new tab:</label>
+      <input type="checkbox" name="openLinksInNewTab" id="openLinksInNewTab" {{ if $up.OpenLinksInNewTab }}checked{{ end }}>
+    </div>
+    <br />
+    
+    <input type="submit" value="Save Preferences">
+  </form>
+
+  <hr />
+
+  <p>{{ $length }} subscriptions:</p>
   <form method="POST" action="/settings/subscribe">
-    <textarea name="submit" rows="10" cols="50">
-{{ range .Data.UrlsAndErrors -}}
-{{ .URL }}
-{{ end -}}
-    </textarea>
+    <textarea name="submit" rows="10" cols="50">{{ range .Data.UrlsAndErrors }}{{ .URL }}
+{{ end }}</textarea>
     <br />
     <input type="submit" value="subscribe">
   </form>
-  {{ $length := len .Data.UrlsAndErrors }}
+
   {{ if eq $length 0 }}
   <pre>
 ‼️ tutorial ‼️
@@ -130,34 +106,59 @@ https://www.visakanv.com/feed/
 ( . .)
 ( づ♡
   </pre>
-  {{ else if gt $length 0 }}
+  {{ else }}
   <p>feed details</p>
-  <p class="puny" style="margin-top: 2em;">Click on the little moon next to each feed to toggle it's <i>favorite</i>
-    status. Unread items from these will appear at the very top of your feed.</p>
+  <p class="puny" style="margin-top: 2em;">Click on the little moon next to each feed to toggle it's <i>favorite</i> status. Unread items from these will appear at the very top of your feed.</p>
   {{ end }}
-  <pre>
-{{ range .Data.UrlsAndErrors -}}
-{{- $hasError := ne .Error "" -}}
-{{- $isFavorite :=  .IsFavorite }}
-<a href="javascript:void(0);" onclick="toggleFavoriteFeed('{{ .URL }}', this)" title="Toggle favorite feed" class="{{- if $isFavorite -}}favorite-link{{- else -}}not-favorite-link{{- end -}}"></a> <a href="/feeds/{{ .URL | escapeURL }}">{{ .URL }}</a> {{ if $hasError }}<span title="{{ .Error }}"  style="cursor: pointer;">⚠️</span>{{ end }}
-{{ end -}}
-  </pre>
+
+  <pre>{{ range .Data.UrlsAndErrors }}{{- $hasError := ne .Error "" -}}{{- $isFavorite := .IsFavorite }}<a href="javascript:void(0);" onclick="toggleFavoriteFeed('{{ .URL }}', this)" title="Toggle favorite feed" class="{{- if $isFavorite -}}favorite-link{{- else -}}not-favorite-link{{- end -}}"></a> <a href="/feeds/{{ .URL | escapeURL }}">{{ .URL }}</a> {{ if $hasError }}<span title="{{ .Error }}" style="cursor: pointer;">⚠️</span>{{ end }}
+{{ end }}</pre>
 </main>
 
 <script>
-  function toggleFavoriteFeed(feedUrl, element) {
-    const oldFavoriteClass = element.className;
+  // Initialize favorite toggle moons on page load
+  document.addEventListener('DOMContentLoaded', function() {
+    const favoriteLinks = document.querySelectorAll('.favorite-link');
+    const notFavoriteLinks = document.querySelectorAll('.not-favorite-link');
+    
+    favoriteLinks.forEach(link => {
+      if (!link.textContent.trim()) {
+        link.textContent = '🌕';
+      }
+    });
+    
+    notFavoriteLinks.forEach(link => {
+      if (!link.textContent.trim()) {
+        link.textContent = '🌑';
+      }
+    });
+  });
 
-    let newFeedFavoriteStatus = true;
-    if (oldFavoriteClass === "favorite-link") {
-      element.className = "not-favorite-link";
-      newFeedFavoriteStatus = false; // changing to non-favorite
+  function addFeed(feedUrl) {
+    const textarea = document.getElementById('submit');
+    const currentFeeds = textarea.value.trim();
+    
+    if (currentFeeds === '') {
+      textarea.value = feedUrl;
     } else {
-      element.className = "favorite-link";
-      newFeedFavoriteStatus = true; // changing to favorite
+      textarea.value = currentFeeds + '\n' + feedUrl;
     }
+    
+    // Scroll textarea to bottom to show the newly added feed
+    textarea.scrollTop = textarea.scrollHeight;
+    
+    // Focus the textarea
+    textarea.focus();
+  }
 
-    const encodedFeed = encodeURIComponent(feedUrl)
+  function toggleFavoriteFeed(feedUrl, element) {
+    const wasFavorite = element.textContent === '🌕';
+    const newFeedFavoriteStatus = !wasFavorite;
+
+    // Update UI immediately
+    element.textContent = newFeedFavoriteStatus ? '🌕' : '🌑';
+
+    const encodedFeed = encodeURIComponent(feedUrl);
     fetch(`/api/v1/toggle-favorite-feed-status/${encodedFeed}`, {
       method: "POST",
       headers: {
@@ -166,8 +167,13 @@ https://www.visakanv.com/feed/
       body: `new_is_favorite=${encodeURIComponent(newFeedFavoriteStatus)}`
     }).then(function (response) {
       if (response.status !== 200) {
-        element.className = oldFavoriteClass;
+        // Revert on error
+        element.textContent = wasFavorite ? '🌕' : '🌑';
       }
+    }).catch(function(error) {
+      console.error('Error toggling favorite:', error);
+      // Revert on error
+      element.textContent = wasFavorite ? '🌕' : '🌑';
     });
   }
 </script>

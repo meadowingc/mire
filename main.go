@@ -91,6 +91,7 @@ func buildRouter(s *Site) *chi.Mux {
 	// api functions
 	router.Post("/api/v1/set-post-read-status/{postUrl}", s.apiSetPostReadStatus)
 	router.Post("/api/v1/toggle-favorite-feed-status/{feedUrl}", s.apiSetFavoriteFeedHandler)
+	router.Post("/api/v1/toggle-subscription/{feedUrl}", s.apiToggleSubscriptionHandler)
 	router.Get("/api/v1/ping", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("pong"))

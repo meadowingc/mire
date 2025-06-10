@@ -496,7 +496,7 @@ func (s *Site) feedDetailsHandler(w http.ResponseWriter, r *http.Request) {
 			posts[i] = &sqlite.UserPostEntry{
 				Post: &gofeed.Item{
 					Title:           post.Title,
-					Link:           post.URL,
+					Link:            post.URL,
 					PublishedParsed: &post.PublishedDatetime,
 				},
 				IsRead:  false, // Non-logged in users see everything as unread
@@ -505,16 +505,55 @@ func (s *Site) feedDetailsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	feed := s.reaper.GetFeed(decodedURL)
+	if feed == nil {
+		// Feed not found in reaper, maybe it exists in DB but hasn't been loaded
+		// Try to fetch it first
+		if !s.reaper.HasFeed(decodedURL) {
+			// Add the feed to reaper and try to fetch it
+			s.reaper.AddFeedStub(decodedURL)
+			err := s.reaper.Fetch(decodedURL)
+			if err != nil {
+				// If we can't fetch it, create a minimal feed object
+				feed = &gofeed.Feed{
+					Title:    decodedURL,
+					FeedLink: decodedURL,
+					Link:     decodedURL,
+				}
+			} else {
+				feed = s.reaper.GetFeed(decodedURL)
+			}
+		} else {
+			// Feed exists in reaper but GetFeed returned nil - this shouldn't happen
+			// Create a minimal feed object as fallback
+			feed = &gofeed.Feed{
+				Title:    decodedURL,
+				FeedLink: decodedURL,
+				Link:     decodedURL,
+			}
+		}
+	}
+
+	// Check if user is subscribed to this feed
+	var isSubscribed bool
+	if loggedInUsername != "" {
+		isSubscribed = s.db.IsUserSubscribedToFeed(loggedInUsername, decodedURL)
+	}
+
 	feedData := struct {
 		Feed            *gofeed.Feed
 		Posts           []*sqlite.UserPostEntry
 		FetchFailure    string
 		UserPreferences *user_preferences.UserPreferences
+		IsSubscribed    bool
+		FeedURL         string
 	}{
-		Feed:            s.reaper.GetFeed(decodedURL),
+		Feed:            feed,
 		Posts:           posts,
 		FetchFailure:    fetchErr,
 		UserPreferences: userPreferences,
+		IsSubscribed:    isSubscribed,
+		FeedURL:         decodedURL,
 	}
 
 	s.renderPage(w, r, "feedDetails", feedData)
@@ -809,6 +848,65 @@ func (s *Site) apiSetFavoriteFeedHandler(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		s.renderErr("apiToggleFavoriteFeedHandler", w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+// apiToggleSubscriptionHandler handles subscribing/unsubscribing to a feed
+func (s *Site) apiToggleSubscriptionHandler(w http.ResponseWriter, r *http.Request) {
+	if !s.loggedIn(r) {
+		s.renderErr("apiToggleSubscriptionHandler", w, "", http.StatusUnauthorized)
+		return
+	}
+
+	feedUrlEncoded := r.PathValue("feedUrl")
+	if feedUrlEncoded == "" {
+		s.renderErr("apiToggleSubscriptionHandler", w, "Feed URL is required", http.StatusBadRequest)
+		return
+	}
+
+	feedUrl, err := url.QueryUnescape(feedUrlEncoded)
+	if err != nil {
+		s.renderErr("apiToggleSubscriptionHandler", w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	username := s.username(r)
+	shouldSubscribe := r.FormValue("subscribe") == "true"
+
+	if shouldSubscribe {
+		// Subscribe to the feed
+		// First ensure the feed exists in the database
+		s.db.WriteFeed(feedUrl)
+		s.db.Subscribe(username, feedUrl)
+
+		// Add to reaper if not already there
+		if !s.reaper.HasFeed(feedUrl) {
+			s.reaper.AddFeedStub(feedUrl)
+			// Try to fetch the feed in the background
+			go func() {
+				err := s.reaper.Fetch(feedUrl)
+				if err != nil {
+					log.Printf("Failed to fetch feed %s: %v", feedUrl, err)
+					s.db.SetFeedFetchError(feedUrl, err.Error())
+				}
+			}()
+		}
+	} else {
+		// Unsubscribe from the feed
+		err = s.db.Unsubscribe(username, feedUrl)
+		if err != nil {
+			s.renderErr("apiToggleSubscriptionHandler", w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// Clean up orphaned data
+		s.db.DeleteOrphanedPostReads(username)
+		orphanedFeeds := s.db.DeleteOrphanFeeds()
+		for _, orphanedFeedUrl := range orphanedFeeds {
+			s.reaper.RemoveFeed(orphanedFeedUrl)
+		}
 	}
 
 	w.WriteHeader(http.StatusOK)

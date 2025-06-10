@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"codeberg.org/meadowingc/mire/constants"
 	"codeberg.org/meadowingc/mire/sqlite"
 	"github.com/mmcdole/gofeed"
 )
@@ -70,23 +71,25 @@ func unlock() {
 // and periodically refreshes all feeds every hour, if the feeds are stale.
 // reaper should only ever be started once (in New)
 func (r *Reaper) start() {
-	urls := r.db.GetAllFeedURLs()
+	if !constants.DEBUG_MODE {
+		urls := r.db.GetAllFeedURLs()
 
-	lock()
-	for _, url := range urls {
-		// Setting FeedLink lets us defer fetching
-		feed := &gofeed.Feed{
-			FeedLink: url,
-		}
+		lock()
+		for _, url := range urls {
+			// Setting FeedLink lets us defer fetching
+			feed := &gofeed.Feed{
+				FeedLink: url,
+			}
 
-		// trigged immediate refresh by setting LastFetched to a time in the past
-		lastRefreshed := time.Now().Add(-timeToBecomeStale)
-		r.feeds[url] = &FeedHolder{
-			Feed:        feed,
-			LastFetched: lastRefreshed,
+			// trigged immediate refresh by setting LastFetched to a time in the past
+			lastRefreshed := time.Now().Add(-timeToBecomeStale)
+			r.feeds[url] = &FeedHolder{
+				Feed:        feed,
+				LastFetched: lastRefreshed,
+			}
 		}
+		unlock()
 	}
-	unlock()
 
 	for {
 		r.refreshAllFeeds()
@@ -306,7 +309,10 @@ func (r *Reaper) HasFeed(url string) bool {
 }
 
 func (r *Reaper) GetFeed(url string) *gofeed.Feed {
-	return r.feeds[url].Feed
+	if feedHolder, ok := r.feeds[url]; ok {
+		return feedHolder.Feed
+	}
+	return nil
 }
 
 func (r *Reaper) GetAllFeeds() []*gofeed.Feed {

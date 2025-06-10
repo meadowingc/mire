@@ -92,6 +92,273 @@ nav a {
   }
 }
 
+/* Feed Details Page Styles */
+.feed-details {
+  padding: 1rem 0;
+}
+
+.feed-header {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.feed-title-section {
+  flex: 1;
+}
+
+.feed-title {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.8rem;
+  font-weight: normal;
+  line-height: 1.2;
+  color: #333;
+}
+
+.feed-link {
+  margin-bottom: 0.5rem;
+}
+
+.feed-link a {
+  color: #666;
+  font-size: 0.9rem;
+  border-bottom: 1px dotted #999;
+}
+
+.subscription-controls {
+  margin-top: 1rem;
+}
+
+.btn {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 0.9rem;
+  transition: background-color 0.2s ease;
+}
+
+.btn-subscribe {
+  background-color: #4CAF50;
+  color: white;
+}
+
+.btn-subscribe:hover {
+  background-color: #45a049;
+}
+
+.btn-unsubscribe {
+  background-color: #ff6b6b;
+  color: white;
+}
+
+.btn-unsubscribe:hover {
+  background-color: #ff5252;
+}
+
+.btn-secondary {
+  background-color: #f0f0f0;
+  color: #333;
+  border: 1px solid #ddd;
+  margin-right: 0.5rem;
+}
+
+.btn-secondary:hover {
+  background-color: #e0e0e0;
+}
+
+.feed-info {
+  margin-bottom: 2rem;
+}
+
+.feed-description {
+  margin-bottom: 1rem;
+}
+
+.feed-description p {
+  color: #555;
+  font-style: italic;
+  margin: 0;
+}
+
+.feed-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+.meta-item {
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.meta-item strong {
+  color: #333;
+}
+
+.fetch-error {
+  color: #d32f2f !important;
+}
+
+.fetch-error strong {
+  color: #d32f2f !important;
+}
+
+.feed-controls {
+  margin-bottom: 1.5rem;
+}
+
+.feed-controls h2 {
+  margin: 0 0 1rem 0;
+  font-size: 1.3rem;
+  font-weight: normal;
+  color: #333;
+}
+
+.bulk-actions {
+  margin-bottom: 1rem;
+}
+
+
+
+
+
+
+/* Button Styles */
+.btn {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 0.9rem;
+  transition: background-color 0.2s ease;
+}
+
+.btn-primary {
+  background-color: #0066cc;
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #0052a3;
+}
+
+.btn-secondary {
+  background-color: #6c757d;
+  color: white;
+}
+
+.btn-secondary:hover {
+  background-color: #5a6268;
+}
+
+/* Favorite feed toggle functionality */
+.favorite-link,
+.not-favorite-link {
+  cursor: pointer;
+  margin-right: 8px;
+  text-decoration: none;
+  border: none;
+}
+
+.favorite-link:hover,
+.not-favorite-link:hover {
+  background-color: #eaddca;
+}
+
+/* Settings page minimal styling improvements */
+.content-page h3 {
+  margin-bottom: 1.5rem;
+  font-size: 1.4rem;
+}
+
+.content-page h4 {
+  margin: 1.5rem 0 1rem 0;
+  font-size: 1.1rem;
+  color: #333;
+}
+
+.content-page form {
+  margin-bottom: 1rem;
+}
+
+.content-page form div {
+  margin-bottom: 0.8rem;
+}
+
+.content-page label {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-weight: normal;
+  color: #333;
+}
+
+.content-page input,
+.content-page select,
+.content-page textarea {
+  font-family: monospace;
+  font-size: 0.9rem;
+  padding: 0.4rem;
+  border: 1px solid #ccc;
+  background-color: #fff;
+}
+
+.content-page input:focus,
+.content-page select:focus,
+.content-page textarea:focus {
+  outline: none;
+  border-color: #666;
+}
+
+.content-page input[type="submit"] {
+  background-color: #f0f0f0;
+  cursor: pointer;
+  padding: 0.5rem 1rem;
+  border: 1px solid #ccc;
+  font-family: monospace;
+}
+
+.content-page input[type="submit"]:hover {
+  background-color: #e0e0e0;
+}
+
+.content-page textarea {
+  resize: vertical;
+  min-height: 8rem;
+}
+
+.content-page hr {
+  margin: 2rem 0;
+  border: none;
+  border-top: 1px solid #ddd;
+}
+
+/* Feed list in settings */
+.content-page pre {
+  line-height: 1.6;
+  font-size: 0.9rem;
+}
+
+.content-page pre a {
+  color: #0066cc;
+}
+
+.content-page pre a:hover {
+  background-color: #f0f8ff;
+}
+
+/* Error indicators */
+.content-page span[title] {
+  margin-left: 0.5rem;
+}
+
+/* Dark mode support */
 @media (prefers-color-scheme: dark) {
   body {
     background-color: #26241f;
@@ -126,12 +393,122 @@ nav a {
   .not-requesting-own-page .toggle-read-status-emoji {
     display: none;
   }
-}
 
-@media screen and (max-width: 350px) {
-  input, select {
-    display: block;
-    width: 100%;
-    box-sizing: border-box;
+  .feed-header {
+    border-bottom-color: #555;
+  }
+
+  .feed-title {
+    color: #d4d4d4;
+  }
+
+  .feed-link a {
+    color: #a0a0a0;
+    border-bottom-color: #666;
+  }
+
+  .feed-description p {
+    color: #b0b0b0;
+  }
+
+  .meta-item {
+    color: #a0a0a0;
+  }
+
+  .meta-item strong {
+    color: #d4d4d4;
+  }
+
+  .btn-secondary {
+    background-color: #3a3a3a;
+    color: #d4d4d4;
+    border-color: #555;
+  }
+
+  .btn-secondary:hover {
+    background-color: #4a4a4a;
+  }
+
+  .feed-controls h2 {
+    color: #d4d4d4;
+  }
+
+  .loading-indicator {
+    background-color: #26241f;
+  }
+
+  .content-page h3,
+  .content-page h4 {
+    color: #d4d4d4;
+  }
+
+  .content-page label {
+    color: #d4d4d4;
+  }
+
+  .content-page input,
+  .content-page select,
+  .content-page textarea {
+    background-color: #3a3a3a;
+    border-color: #555;
+    color: #d4d4d4;
+  }
+
+  .content-page input[type="submit"] {
+    background-color: #3a3a3a;
+    color: #d4d4d4;
+    border-color: #555;
+  }
+
+  .content-page input[type="submit"]:hover {
+    background-color: #4a4a4a;
+  }
+
+  .content-page hr {
+    border-top-color: #555;
+  }
+
+  .content-page pre a {
+    color: #88aaff;
+  }
+
+  .content-page pre a:hover {
+    background-color: #2a2a3a;
   }
 }
+
+/* Responsive design */
+@media screen and (min-width: 500px) {
+  .feed-header {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+
+  .subscription-controls {
+    margin-top: 0;
+    flex-shrink: 0;
+  }
+}
+
+/* Input styling improvements */
+input[type="number"] {
+  min-width: 80px;
+  padding-right: 25px; /* Extra space for spinner controls */
+}
+
+input[type="text"], input[type="password"], input[type="number"], select, textarea {
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 1rem;
+}
+
+input[type="text"]:focus, input[type="password"]:focus, input[type="number"]:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: #0066cc;
+  box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.1);
+}
+
+

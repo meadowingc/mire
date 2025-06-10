@@ -7,20 +7,68 @@
 	<div class="loading-indicator__spinner"></div>
 </div>
 
-<h3><a href="{{ .Data.Feed.Link }}">{{ .Data.Feed.Link | printDomain }}</a></h3>
+<main class="feed-details">
+	<!-- Feed Header -->
+	<header class="feed-header">
+		<div class="feed-title-section">
+			<h1 class="feed-title">{{ .Data.Feed.Title }}</h1>
+			<div class="feed-link">
+				<a href="{{ .Data.Feed.Link }}" target="_blank" rel="noopener">
+					{{ .Data.Feed.Link | printDomain }} ↗
+				</a>
+			</div>
+		</div>
 
-<div>Title: {{ .Data.Feed.Title }}</div>
-<div>Description: {{ .Data.Feed.Description }}</div>
-<br/>
-<div>Last Fetch Failure: {{ if .Data.FetchFailure }}{{ .Data.FetchFailure }}{{ else }}never{{ end }}</div>
+		{{ if .LoggedIn }}
+		<div class="subscription-controls">
+			{{ if .Data.IsSubscribed }}
+			<button onclick="toggleSubscription(false)" class="btn btn-unsubscribe">
+				Unsubscribe
+			</button>
+			{{ else }}
+			<button onclick="toggleSubscription(true)" class="btn btn-subscribe">
+				Subscribe
+			</button>
+			{{ end }}
+		</div>
+		{{ end }}
+	</header>
 
-<h4>Feed Items</h4>
+	<!-- Feed Details -->
+	<section class="feed-info">
+		{{ if .Data.Feed.Description }}
+		<div class="feed-description">
+			<p>{{ .Data.Feed.Description }}</p>
+		</div>
+		{{ end }}
+		
+		<div class="feed-meta">
+			<div class="meta-item">
+				<strong>Items:</strong> {{ len .Data.Posts }}
+			</div>
+			<div class="meta-item">
+				<strong>Unread:</strong> <span id="unread-counter">...</span>
+			</div>
+			{{ if .Data.FetchFailure }}
+			<div class="meta-item fetch-error">
+				<strong>Last Fetch Error:</strong> {{ .Data.FetchFailure }}
+			</div>
+			{{ end }}
+		</div>
+	</section>
 
-<p>{{ len .Data.Posts }} Items (<span id="unread-counter">...</span> unread)</p>
-<p>
-	<button onclick="markAllAsRead()" style="margin-right: 10px;">Mark All as Read</button>
-	<button onclick="markAllAsUnread()">Mark All as Unread</button>
-</p>
+	<!-- Controls -->
+	<section class="feed-controls">
+		<h2>Feed Items</h2>
+		<div class="bulk-actions">
+			<button onclick="markAllAsRead()" class="btn btn-secondary">
+				Mark All as Read
+			</button>
+			<button onclick="markAllAsUnread()" class="btn btn-secondary">
+				Mark All as Unread
+			</button>
+		</div>
+	</section>
 
 <ul id="feed-items-container">
 	{{ range .Data.Posts }}
@@ -171,6 +219,30 @@
 		} catch (error) {
 			console.error("Error marking all as unread:", error);
 			// Could add error handling here to revert UI changes if needed
+		}
+	}
+	async function toggleSubscription(shouldSubscribe) {
+		const feedUrl = encodeURIComponent('{{ .Data.FeedURL }}');
+		
+		try {
+			const response = await fetch(`/api/v1/toggle-subscription/${feedUrl}`, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/x-www-form-urlencoded"
+				},
+				body: `subscribe=${encodeURIComponent(shouldSubscribe)}`
+			});
+
+			if (response.ok) {
+				// Reload the page to reflect the new subscription status
+				window.location.reload();
+			} else {
+				console.error("Error toggling subscription:", response.statusText);
+				alert("Error updating subscription. Please try again.");
+			}
+		} catch (error) {
+			console.error("Error toggling subscription:", error);
+			alert("Error updating subscription. Please try again.");
 		}
 	}
 </script>

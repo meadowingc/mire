@@ -97,6 +97,18 @@ var listOfSpammyFeeds = []string{
 	"vox.com",
 	"wolnelektury.pl",
 	"youtube.com",
+	"web.hypothes.is",
+	"copykat.com",
+}
+
+// Known feed aggregator domains that should be filtered by feed URL, not post URL
+var knownFeedAggregators = []string{
+	"feedburner.com",
+	"feedproxy.google.com",
+	"feeds.feedburner.com",
+	"feedle.world",
+	"granary.io",
+	"kill-the-newsletter.com",
 }
 
 var mutex = make(chan struct{}, 1)
@@ -292,7 +304,7 @@ func (db *DB) SetFeedFavoriteStatus(username string, feedURL string, isFavorite 
 func (db *DB) GetFavoriteUnreadPosts(username string, limit int) ([]*UserPostEntry, error) {
 	userId := db.GetUserID(username)
 	rows, err := db.sql.Query(`
-		SELECT p.title, p.url, p.published_at, pr.has_read
+		SELECT p.title, p.url, p.published_at, pr.has_read, f.url
 		FROM post p
 		JOIN feed f ON p.feed_id = f.id
 		JOIN subscribe s ON f.id = s.feed_id
@@ -315,12 +327,14 @@ func (db *DB) GetFavoriteUnreadPosts(username string, limit int) ([]*UserPostEnt
 		var entry UserPostEntry
 		var p gofeed.Item
 		var hasRead sql.NullBool
-		err = rows.Scan(&p.Title, &p.Link, &p.PublishedParsed, &hasRead)
+		var feedURL string
+		err = rows.Scan(&p.Title, &p.Link, &p.PublishedParsed, &hasRead, &feedURL)
 		if err != nil {
 			return nil, err
 		}
 
 		entry.Post = &p
+		entry.FeedURL = feedURL
 		entry.IsRead = hasRead.Valid && hasRead.Bool // IsRead is true if hasRead is not NULL and is true
 
 		favoriteUnreadPosts = append(favoriteUnreadPosts, &entry)
@@ -548,6 +562,10 @@ func (db *DB) GetFeedID(feedURL string) int {
 
 	err := db.sql.QueryRow("SELECT id FROM feed WHERE url=?", feedURL).Scan(&fid)
 
+	if err == sql.ErrNoRows {
+		// Feed doesn't exist, return 0 to indicate no feed found
+		return 0
+	}
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -582,6 +600,10 @@ func (db *DB) GetFeedFetchError(url string) (string, error) {
 
 	err := db.sql.QueryRow("SELECT fetch_error FROM feed WHERE url=?", url).Scan(&result)
 
+	if err == sql.ErrNoRows {
+		// Feed doesn't exist in database, return empty error
+		return "", nil
+	}
 	if err != nil {
 		return "", err
 	}
@@ -641,11 +663,20 @@ func (db *DB) GetLatestPostsForDiscover(limit int) []*Post {
         WHERE `
 
 	// Add a 'NOT LIKE' clause for each item in the exclusion list
-	for i, url := range listOfSpammyFeeds {
+	// Filter based on post URL for most domains, but allow feed aggregators
+	for i, domain := range listOfSpammyFeeds {
 		if i > 0 {
 			query += " AND "
 		}
-		query += fmt.Sprintf("p.url NOT LIKE '%%%s%%'", url)
+
+		// For known feed aggregators, don't filter out posts they aggregate
+		if isKnownFeedAggregator(domain) {
+			// For aggregators, filter based on feed URL instead of post URL
+			query += fmt.Sprintf("f.url NOT LIKE '%%%s%%'", domain)
+		} else {
+			// For regular domains, filter based on post URL
+			query += fmt.Sprintf("p.url NOT LIKE '%%%s%%'", domain)
+		}
 	}
 
 	query += `
@@ -681,6 +712,11 @@ func (db *DB) GetLatestPostsForDiscover(limit int) []*Post {
 func (db *DB) GetPostsForFeed(feedUrl string) []*Post {
 	feedId := db.GetFeedID(feedUrl)
 
+	// If feed doesn't exist, return empty list
+	if feedId == 0 {
+		return []*Post{}
+	}
+
 	rows, err := db.sql.Query(`
         SELECT p.title, p.url, p.published_at, f.url
         FROM post p
@@ -706,6 +742,11 @@ func (db *DB) GetPostsForFeed(feedUrl string) []*Post {
 func (db *DB) GetPostsForFeedWithReadStatus(feedUrl string, username string) []*UserPostEntry {
 	uid := db.GetUserID(username)
 	feedId := db.GetFeedID(feedUrl)
+
+	// If feed doesn't exist, return empty list
+	if feedId == 0 {
+		return []*UserPostEntry{}
+	}
 
 	rows, err := db.sql.Query(`
         SELECT p.title, p.url, p.published_at, pr.has_read, f.url
@@ -954,5 +995,46 @@ func (db *DB) UpdatePassword(username string, newPassword string) error {
 	lock()
 	_, err := db.sql.Exec("UPDATE user SET password=? WHERE username=?", newPassword, username)
 	unlock()
+	return err
+}
+
+// isKnownFeedAggregator checks if a domain is a known feed aggregator
+func isKnownFeedAggregator(domain string) bool {
+	for _, aggregator := range knownFeedAggregators {
+		if domain == aggregator {
+			return true
+		}
+	}
+	return false
+}
+
+// IsUserSubscribedToFeed checks if a user is subscribed to a specific feed
+func (db *DB) IsUserSubscribedToFeed(username string, feedURL string) bool {
+	userId := db.GetUserID(username)
+
+	var count int
+	err := db.sql.QueryRow(`
+		SELECT COUNT(*) 
+		FROM subscribe s
+		JOIN feed f ON s.feed_id = f.id
+		WHERE s.user_id = ? AND f.url = ?`, userId, feedURL).Scan(&count)
+
+	if err != nil {
+		log.Printf("Error checking if user is subscribed to feed: %v", err)
+		return false
+	}
+
+	return count > 0
+}
+
+// Unsubscribe removes a user's subscription to a specific feed
+func (db *DB) Unsubscribe(username string, feedURL string) error {
+	userId := db.GetUserID(username)
+	feedId := db.GetFeedID(feedURL)
+
+	lock()
+	_, err := db.sql.Exec("DELETE FROM subscribe WHERE user_id=? AND feed_id=?", userId, feedId)
+	unlock()
+
 	return err
 }
