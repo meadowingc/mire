@@ -1001,7 +1001,7 @@ func (db *DB) UpdatePassword(username string, newPassword string) error {
 // isKnownFeedAggregator checks if a domain is a known feed aggregator
 func isKnownFeedAggregator(domain string) bool {
 	for _, aggregator := range knownFeedAggregators {
-		if domain == aggregator {
+		if strings.Contains(domain, aggregator) {
 			return true
 		}
 	}
