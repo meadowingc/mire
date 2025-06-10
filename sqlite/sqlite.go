@@ -48,6 +48,7 @@ var listOfSpammyFeeds = []string{
 	"frame.work",
 	"granary.io",
 	"internetstealsanddeals.net",
+	"jw-cdn.org",
 	"jw.org",
 	"kagifeedback.org",
 	"lemonde.fr",
