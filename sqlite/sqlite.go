@@ -39,8 +39,10 @@ var listOfSpammyFeeds = []string{
 	"anchor.fm",
 	"arstechnica.com",
 	"astralcodexten.com",
+	"birchtree.me",
 	"blog.flickr.net",
 	"codeberg.org",
+	"copykat.com",
 	"crimethinc.com",
 	"css-tip.com",
 	"defector.com",
@@ -68,6 +70,7 @@ var listOfSpammyFeeds = []string{
 	"macstories.net",
 	"mcsweeneys.net",
 	"merriam-webster.com",
+	"Millo.co",
 	"namecoin.org",
 	"nautil.us",
 	"nesslabs.com",
@@ -95,10 +98,9 @@ var listOfSpammyFeeds = []string{
 	"twitch.tv",
 	"utoronto.ca",
 	"vox.com",
+	"web.hypothes.is",
 	"wolnelektury.pl",
 	"youtube.com",
-	"web.hypothes.is",
-	"copykat.com",
 }
 
 // Known feed aggregator domains that should be filtered by feed URL, not post URL
