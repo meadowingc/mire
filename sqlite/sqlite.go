@@ -35,7 +35,6 @@ type UserPostEntry struct {
 
 var listOfSpammyFeeds = []string{
 	"anchor.fm",
-	"apps.jw.org",
 	"arstechnica.com",
 	"codeberg.org",
 	"crimethinc.com",
@@ -49,6 +48,7 @@ var listOfSpammyFeeds = []string{
 	"frame.work",
 	"granary.io",
 	"internetstealsanddeals.net",
+	"jw.org",
 	"kagifeedback.org",
 	"lemonde.fr",
 	"longreads.com",
