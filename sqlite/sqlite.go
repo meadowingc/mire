@@ -35,6 +35,7 @@ type UserPostEntry struct {
 
 var listOfSpammyFeeds = []string{
 	"anchor.fm",
+	"apps.jw.org",
 	"arstechnica.com",
 	"codeberg.org",
 	"crimethinc.com",
@@ -47,6 +48,7 @@ var listOfSpammyFeeds = []string{
 	"finshots.in",
 	"frame.work",
 	"granary.io",
+	"internetstealsanddeals.net",
 	"kagifeedback.org",
 	"lemonde.fr",
 	"longreads.com",
@@ -55,15 +57,21 @@ var listOfSpammyFeeds = []string{
 	"namecoin.org",
 	"nautil.us",
 	"nesslabs.com",
+	"nowkalamazoo.org",
+	"omnycontent.com",
 	"pewresearch.org",
+	"reddit.com",
 	"reductress.com",
+	"sapo.pt",
 	"scotthyoung.com",
 	"sidebar.io",
 	"slashdot.org",
 	"status.cafe",
 	"theonion.com",
+	"theringer.com",
 	"thisiscolossal.com",
 	"vox.com",
+	"wolnelektury.pl",
 	"youtube.com",
 }
 
