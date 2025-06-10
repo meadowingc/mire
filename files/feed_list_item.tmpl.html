@@ -1,0 +1,25 @@
+{{ define "feed_list_item" }}
+
+{{ $emoji := "" }}
+{{ $class := "" }}
+{{ if .IsRead }}
+	{{ $emoji = "📜" }}
+	{{ $class = "read" }}
+{{ else }}
+	{{ $emoji = "💌" }}
+	{{ $class = "unread" }}
+{{ end }}
+{{ $post := .Post }}
+<li>
+	<a class="toggle-read-status-emoji" href="javascript:void(0);" onclick="toggleReadStatus(event);">{{ $emoji }}</a>
+
+	<a href="{{ $post.Link }}" class="{{$class}}" onclick="visitLink(event);">
+		{{ $post.Title }}
+	</a>
+	<br>
+	<span class=puny title="{{ $post.PublishedParsed }}">
+		published {{ $post.PublishedParsed | timeSince }}
+	</span>
+</li>
+
+{{end}}

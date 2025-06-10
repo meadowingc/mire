@@ -478,14 +478,43 @@ func (s *Site) feedDetailsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get user preferences for logged in users
+	loggedInUsername := s.username(r)
+	var userPreferences *user_preferences.UserPreferences
+	var posts []*sqlite.UserPostEntry
+
+	if loggedInUsername != "" {
+		userPreferences = user_preferences.GetUserPreferences(s.db, s.db.GetUserID(loggedInUsername))
+		// Get posts with read status for logged in users
+		posts = s.db.GetPostsForFeedWithReadStatus(decodedURL, loggedInUsername)
+	} else {
+		userPreferences = user_preferences.GetDefaultUserPreferences()
+		// For non-logged in users, convert regular posts to UserPostEntry format
+		regularPosts := s.db.GetPostsForFeed(decodedURL)
+		posts = make([]*sqlite.UserPostEntry, len(regularPosts))
+		for i, post := range regularPosts {
+			posts[i] = &sqlite.UserPostEntry{
+				Post: &gofeed.Item{
+					Title:           post.Title,
+					Link:           post.URL,
+					PublishedParsed: &post.PublishedDatetime,
+				},
+				IsRead:  false, // Non-logged in users see everything as unread
+				FeedURL: post.FeedURL,
+			}
+		}
+	}
+
 	feedData := struct {
-		Feed         *gofeed.Feed
-		Posts        []*sqlite.Post
-		FetchFailure string
+		Feed            *gofeed.Feed
+		Posts           []*sqlite.UserPostEntry
+		FetchFailure    string
+		UserPreferences *user_preferences.UserPreferences
 	}{
-		Feed:         s.reaper.GetFeed(decodedURL),
-		Posts:        s.db.GetPostsForFeed(decodedURL),
-		FetchFailure: fetchErr,
+		Feed:            s.reaper.GetFeed(decodedURL),
+		Posts:           posts,
+		FetchFailure:    fetchErr,
+		UserPreferences: userPreferences,
 	}
 
 	s.renderPage(w, r, "feedDetails", feedData)

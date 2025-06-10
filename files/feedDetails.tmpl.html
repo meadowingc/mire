@@ -3,6 +3,10 @@
 {{ template "head" . }}
 {{ template "nav" . }}
 
+<div id="loading-indicator" class="loading-indicator" style="display: none;">
+	<div class="loading-indicator__spinner"></div>
+</div>
+
 <h3><a href="{{ .Data.Feed.Link }}">{{ .Data.Feed.Link | printDomain }}</a></h3>
 
 <div>Title: {{ .Data.Feed.Title }}</div>
@@ -12,16 +16,164 @@
 
 <h4>Feed Items</h4>
 
-<p>{{ len .Data.Posts }} Items:</p>
+<p>{{ len .Data.Posts }} Items (<span id="unread-counter">...</span> unread)</p>
+<p>
+	<button onclick="markAllAsRead()" style="margin-right: 10px;">Mark All as Read</button>
+	<button onclick="markAllAsUnread()">Mark All as Unread</button>
+</p>
 
-{{ range .Data.Posts }}
-<details>
-    <summary>{{ .Title }}</summary>
-    <div>Date: {{ .PublishedDatetime }}</div>
-    <div>Link: <a href="{{ .URL }}">{{ .URL }}</a></div>
-    <br/>
-</details>
-{{ end }}
+<ul id="feed-items-container">
+	{{ range .Data.Posts }}
+	{{ template "feed_list_item" . }}
+	{{ end }}
+</ul>
+
+<script>
+	(function () {
+		document.getElementById("loading-indicator").style.display = "none";
+		refreshUnreadCounter();
+	})();
+
+	function refreshUnreadCounter() {
+		const unreadCounter = document.querySelector("#unread-counter");
+		if (unreadCounter) {
+			const numUnreadItems = document.querySelectorAll("#feed-items-container a.unread").length;
+			unreadCounter.innerHTML = numUnreadItems;
+		}
+	}
+
+	function toggleReadStatus(event) {
+		const element = event.target;
+		const titleElement = element.parentElement.querySelectorAll("a")[1];
+		const isRead = titleElement.className === "read";
+
+		const postUrl = encodeURIComponent(titleElement.href);
+		const newReadStatus = !isRead;
+
+		const allSameUrlElements = Array
+			.from(document.querySelectorAll(`a[href='${titleElement.href}']`))
+			.map(linkHolderElement => {
+				const anchors = linkHolderElement.parentElement.querySelectorAll("a");
+				return {
+					emojiHolder: anchors[0],
+					title: anchors[1],
+				};
+			});
+
+		allSameUrlElements.forEach(els => {
+			els.title.className = newReadStatus ? "read" : "unread";
+			els.emojiHolder.innerText = newReadStatus ? "📜" : "💌";
+		});
+
+		setReadStatus(postUrl, newReadStatus).then(function (response) {
+			if (response.status !== 200) {
+				// undo the change
+				allSameUrlElements.forEach(els => {
+					els.title.className = isRead ? "read" : "unread";
+					els.emojiHolder.innerText = isRead ? "📜" : "💌";
+				});
+			}
+
+			refreshUnreadCounter();
+		});
+	}
+
+	async function visitLink(event) {
+		event.preventDefault();
+
+		document.getElementById("loading-indicator").style.display = "block";
+
+		const element = event.target;
+		const postUrl = encodeURIComponent(element.href);
+
+		const allSameUrlElements = Array
+			.from(document.querySelectorAll(`a[href='${element.href}']`))
+			.map(linkHolderElement => {
+				return linkHolderElement.parentElement.querySelectorAll("a")[0];
+			});
+
+		allSameUrlElements.forEach(el => {
+			el.className = "read";
+			el.innerText = "📜";
+		});
+
+		// Always mark the post as read
+		await setReadStatus(postUrl, true);
+
+		const openInNewTab = {{ if .Data.UserPreferences.OpenLinksInNewTab }}true{{ else }}false{{ end }};
+		if (openInNewTab || event.ctrlKey || event.metaKey) {
+			// Ctrl or Cmd was pressed, open the link in a new tab, which is the default behavior
+			window.open(element.href, "_blank");
+
+			// now that the link was opened in a new tab, we can hide the loading indicator
+			document.getElementById("loading-indicator").style.display = "none";
+		} else {
+			// Ctrl or Cmd was not pressed, navigate to the link in the current tab
+			window.location.href = element.href;
+		}
+	}
+
+	function setReadStatus(postUrl, newReadStatus) {
+		postUrl = encodeURIComponent(postUrl);
+		return fetch(`/api/v1/set-post-read-status/${postUrl}`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/x-www-form-urlencoded"
+			},
+			body: `new_has_read=${encodeURIComponent(newReadStatus)}`
+		});
+	}
+
+	async function markAllAsRead() {
+		const unreadLinks = document.querySelectorAll("#feed-items-container a.unread");
+		const promises = [];
+
+		unreadLinks.forEach(linkElement => {
+			// Update UI immediately
+			const emojiElement = linkElement.parentElement.querySelector("a.toggle-read-status-emoji");
+			linkElement.className = "read";
+			emojiElement.innerText = "📜";
+
+			// Queue API call
+			const postUrl = encodeURIComponent(linkElement.href);
+			promises.push(setReadStatus(postUrl, true));
+		});
+
+		// Execute all API calls
+		try {
+			await Promise.all(promises);
+			refreshUnreadCounter();
+		} catch (error) {
+			console.error("Error marking all as read:", error);
+			// Could add error handling here to revert UI changes if needed
+		}
+	}
+
+	async function markAllAsUnread() {
+		const readLinks = document.querySelectorAll("#feed-items-container a.read");
+		const promises = [];
+
+		readLinks.forEach(linkElement => {
+			// Update UI immediately
+			const emojiElement = linkElement.parentElement.querySelector("a.toggle-read-status-emoji");
+			linkElement.className = "unread";
+			emojiElement.innerText = "💌";
+
+			// Queue API call
+			const postUrl = encodeURIComponent(linkElement.href);
+			promises.push(setReadStatus(postUrl, false));
+		});
+
+		// Execute all API calls
+		try {
+			await Promise.all(promises);
+			refreshUnreadCounter();
+		} catch (error) {
+			console.error("Error marking all as unread:", error);
+			// Could add error handling here to revert UI changes if needed
+		}
+	}
+</script>
 
 {{ template "tail" . }}
 {{ end }}

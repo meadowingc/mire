@@ -34,10 +34,12 @@ type UserPostEntry struct {
 }
 
 var listOfSpammyFeeds = []string{
+	"404media.co",
 	"aftermath.site",
 	"anchor.fm",
 	"arstechnica.com",
 	"astralcodexten.com",
+	"blog.flickr.net",
 	"codeberg.org",
 	"crimethinc.com",
 	"css-tip.com",
@@ -53,6 +55,7 @@ var listOfSpammyFeeds = []string{
 	"frontendmasters.com",
 	"google.com",
 	"granary.io",
+	"ikeahackers.net",
 	"infosec.exchange",
 	"internetstealsanddeals.net",
 	"iphonelife.com",
@@ -82,10 +85,14 @@ var listOfSpammyFeeds = []string{
 	"simplecast.com",
 	"slashdot.org",
 	"status.cafe",
+	"talk.tiddlywiki.org",
 	"technologyreview.com",
+	"themagicalslowcooker.com",
+	"themorningnews.org",
 	"theonion.com",
 	"theringer.com",
 	"thisiscolossal.com",
+	"twitch.tv",
 	"utoronto.ca",
 	"vox.com",
 	"wolnelektury.pl",
@@ -694,6 +701,43 @@ func (db *DB) GetPostsForFeed(feedUrl string) []*Post {
 		posts = append(posts, &p)
 	}
 	return posts
+}
+
+func (db *DB) GetPostsForFeedWithReadStatus(feedUrl string, username string) []*UserPostEntry {
+	uid := db.GetUserID(username)
+	feedId := db.GetFeedID(feedUrl)
+
+	rows, err := db.sql.Query(`
+        SELECT p.title, p.url, p.published_at, pr.has_read, f.url
+        FROM post p
+        JOIN feed f ON p.feed_id = f.id
+        LEFT JOIN post_read pr ON p.id = pr.post_id AND pr.user_id = ?
+        WHERE p.feed_id = ?
+        ORDER BY p.published_at DESC`, uid, feedId)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+
+	var userPostsEntries []*UserPostEntry
+	for rows.Next() {
+		var entry UserPostEntry
+		var p gofeed.Item
+		var hasRead sql.NullBool
+		var feedURL string
+		err = rows.Scan(&p.Title, &p.Link, &p.PublishedParsed, &hasRead, &feedURL)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		entry.Post = &p
+		entry.FeedURL = feedURL
+		entry.IsRead = hasRead.Valid && hasRead.Bool // IsRead is true if hasRead is not NULL and is true
+
+		userPostsEntries = append(userPostsEntries, &entry)
+	}
+
+	return userPostsEntries
 }
 
 func (db *DB) GetPostsForUser(username string, limit int) []*UserPostEntry {
