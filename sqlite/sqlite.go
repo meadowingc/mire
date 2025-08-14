@@ -34,17 +34,21 @@ type UserPostEntry struct {
 }
 
 var listOfSpammyFeeds = []string{
+	"//fs.blog",
 	"404media.co",
 	"aftermath.site",
 	"anchor.fm",
+	"appaddict.app",
 	"arstechnica.com",
 	"astralcodexten.com",
 	"birchtree.me",
 	"blog.flickr.net",
+	"citationneeded.news",
 	"codeberg.org",
 	"copykat.com",
 	"crimethinc.com",
 	"css-tip.com",
+	"css-tricks.com",
 	"defector.com",
 	"f-droid.org",
 	"facebook.com",
@@ -55,12 +59,15 @@ var listOfSpammyFeeds = []string{
 	"finshots.in",
 	"frame.work",
 	"frontendmasters.com",
+	"fsfe.org",
 	"google.com",
 	"granary.io",
+	"home-designing.com",
 	"ikeahackers.net",
 	"infosec.exchange",
 	"internetstealsanddeals.net",
 	"iphonelife.com",
+	"irgendwiejuedisch.com",
 	"jw-cdn.org",
 	"jw.org",
 	"kagifeedback.org",
@@ -68,17 +75,22 @@ var listOfSpammyFeeds = []string{
 	"lemonde.fr",
 	"longreads.com",
 	"macstories.net",
+	"marlybird.com",
 	"mcsweeneys.net",
 	"merriam-webster.com",
 	"Millo.co",
+	"mooglyblog.com",
 	"namecoin.org",
 	"nautil.us",
 	"nesslabs.com",
 	"nowkalamazoo.org",
 	"obsidianstats.com",
+	"ohohdeco.com",
 	"omny.fm",
 	"omnycontent.com",
 	"pewresearch.org",
+	"piccalil.li",
+	"pluralistic.net",
 	"producthunt.com",
 	"reddit.com",
 	"reductress.com",
@@ -87,16 +99,20 @@ var listOfSpammyFeeds = []string{
 	"sidebar.io",
 	"simplecast.com",
 	"slashdot.org",
+	"stackexchange.com",
 	"status.cafe",
 	"talk.tiddlywiki.org",
 	"technologyreview.com",
+	"thecrochetcrowd.com",
 	"themagicalslowcooker.com",
 	"themorningnews.org",
 	"theonion.com",
 	"theringer.com",
 	"thisiscolossal.com",
+	"treknews.net",
 	"twitch.tv",
 	"utoronto.ca",
+	"vivaldi.com",
 	"vox.com",
 	"web.hypothes.is",
 	"wolnelektury.pl",
@@ -105,12 +121,14 @@ var listOfSpammyFeeds = []string{
 
 // Known feed aggregator domains that should be filtered by feed URL, not post URL
 var knownFeedAggregators = []string{
+	"feedbin.com",
 	"feedburner.com",
+	"feedle.world",
 	"feedproxy.google.com",
 	"feeds.feedburner.com",
-	"feedle.world",
 	"granary.io",
 	"kill-the-newsletter.com",
+	"sidebar.io",
 }
 
 var mutex = make(chan struct{}, 1)
@@ -671,20 +689,20 @@ func (db *DB) GetLatestPostsForDiscover(limit int) []*Post {
 			query += " AND "
 		}
 
-		// For known feed aggregators, don't filter out posts they aggregate
-		if isKnownFeedAggregator(domain) {
-			// For aggregators, filter based on feed URL instead of post URL
-			query += fmt.Sprintf("f.url NOT LIKE '%%%s%%'", domain)
-		} else {
-			// For regular domains, filter based on post URL
-			query += fmt.Sprintf("p.url NOT LIKE '%%%s%%'", domain)
-		}
+		query += fmt.Sprintf("p.url NOT LIKE '%%%s%%'", domain)
+	}
+
+	// filter out known feed aggregators
+	for _, aggregator := range knownFeedAggregators {
+		query += fmt.Sprintf(" AND f.url NOT LIKE '%%%s%%'", aggregator)
 	}
 
 	query += `
         GROUP BY p.url
         ORDER BY p.published_at DESC
         LIMIT ?`
+
+	fmt.Printf("Query: %s", query)
 
 	rows, err := db.sql.Query(query, limit)
 	if err != nil {
@@ -998,16 +1016,6 @@ func (db *DB) UpdatePassword(username string, newPassword string) error {
 	_, err := db.sql.Exec("UPDATE user SET password=? WHERE username=?", newPassword, username)
 	unlock()
 	return err
-}
-
-// isKnownFeedAggregator checks if a domain is a known feed aggregator
-func isKnownFeedAggregator(domain string) bool {
-	for _, aggregator := range knownFeedAggregators {
-		if strings.Contains(domain, aggregator) {
-			return true
-		}
-	}
-	return false
 }
 
 // IsUserSubscribedToFeed checks if a user is subscribed to a specific feed
