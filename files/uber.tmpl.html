@@ -1,0 +1,296 @@
+{{ define "uber" }}
+{{ template "head" . }}
+{{ template "nav" . }}
+
+<style>
+html, body { max-width: none !important; width: 100%; margin: 0; }
+#uber-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 2rem;
+  padding: 0 2rem 3rem 2rem;
+  box-sizing: border-box;
+  width: 100%;
+}
+#sidebar {
+  position: sticky;
+  top: 0;
+  max-height: 100vh;
+  overflow-y: auto;
+  min-width: 250px;
+  padding-top: .75rem;
+  padding-bottom: 1rem;
+}
+#sidebar h3 { margin:0 0 .75rem 0; font-size: .95rem; }
+#sidebar ul { font-size: 0.85rem; margin:0; padding:0; list-style:none; }
+#sidebar li { padding: 2px 0; }
+#sidebar a { display: block; padding: 2px 0; }
+#items {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.85rem;
+}
+#items h2 {
+  margin: 2.5rem 0 .65rem 0;
+  font-size: 1rem;
+  line-height: 1.1;
+}
+#items h2:first-child {
+  margin-top: .75rem;
+}
+.uber-feed-posts {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 .5rem;
+  border-left: 1px solid #ddd;
+}
+.uber-feed-posts li {
+  padding: 4px 0;
+  line-height: 1.25;
+  word-break: break-word;
+  white-space: normal;
+  display: flex;
+  align-items: flex-start;
+  gap: .35rem;
+}
+.toggle-read-status-emoji {
+  text-decoration: none;
+  width: 1.4em;
+  text-align: center;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.post-link {
+  flex: 1;
+  text-decoration: none;
+}
+.post-link.unread .title { font-weight: bold; text-decoration: underline; }
+.time {
+  color: #666;
+  display: inline-block;
+  min-width: 145px;
+  flex-shrink: 0;
+}
+.title { display: inline; }
+@media (prefers-color-scheme: dark) {
+  .time { color: #aaa; }
+  .uber-feed-posts { border-left-color: #555; }
+  .toggle-read-status-emoji { color: #d4d4d4; }
+}
+@media (max-width: 900px) {
+  #uber-layout { gap:1.25rem; padding: 0 1rem 2.5rem 1rem; }
+  .time { min-width: 125px; font-size: .7rem; color:#888; }
+}
+@media (max-width: 720px) {
+  #uber-layout { flex-direction: column; }
+  #sidebar {
+    position: static;
+    max-height: none;
+    display: block;
+    width: 100%;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: .75rem;
+    background: none;
+  }
+  #items h2 { margin: 2rem 0 .5rem 0; }
+  #items h2:first-child { margin-top:1rem; }
+  .uber-feed-posts { border-left: none; padding-left: 0; }
+  .time { min-width: 6.2rem; }
+}
+@media (max-width: 480px) {
+  #uber-layout { padding: 0 .75rem 2rem .75rem; }
+  .time { min-width: 5.6rem; font-size:.65rem; }
+  .uber-feed-posts li { padding: 3px 0; }
+}
+</style>
+
+<div id="uber-layout">
+  <div id="sidebar">
+    <h3>feeds</h3>
+    <ul>
+    {{- range .Data.Feeds }}
+      <li {{ if gt .UnreadCount 0 }}class="n"{{ end }}>
+        <a href="#{{ .AnchorID }}" {{ if gt .UnreadCount 0 }}style="font-weight:bold; text-decoration:underline;"{{ end }}>{{ .Title }} ({{ .UnreadCount }})</a>
+      </li>
+    {{- end }}
+    </ul>
+  </div>
+
+  <div id="items">
+    {{- range .Data.Feeds }}
+      <h2 id="{{ .AnchorID }}"><a href="#{{ .AnchorID }}">{{ .Title }}</a></h2>
+      <ul class="uber-feed-posts" data-anchor="{{ .AnchorID }}">
+      {{- range .Posts }}
+        {{- $t := .Post.PublishedParsed -}}
+        {{- $isRead := .IsRead -}}
+        <li>
+          <span class="time">
+            {{- if $t -}}{{ $t.Format "2006-01-02" }}&nbsp;{{ $t.Format "15:04" }}{{ else }}0000-00-00&nbsp;00:00{{ end }}
+          </span>
+          <a class="toggle-read-status-emoji" href="javascript:void(0);" onclick="toggleReadStatus(event);">{{ if $isRead }}📜{{ else }}💌{{ end }}</a>
+          <a href="{{ .Post.Link }}" class="post-link {{ if $isRead }}read{{ else }}unread{{ end }}" onclick="visitLink(event);">
+            <span class="title">
+              {{- if not $isRead -}}<b><u>{{ .Post.Title }}</u></b>{{ else }}{{ .Post.Title }}{{ end }}
+            </span>
+          </a>
+        </li>
+      {{- end }}
+      </ul>
+    {{- end }}
+  </div>
+</div>
+
+<script>
+(function() {
+
+  function updateSidebarCounts() {
+    document.querySelectorAll('#items h2').forEach(h2 => {
+      const anchorId = h2.id;
+      const list = h2.nextElementSibling;
+      if (!list || !list.classList.contains('uber-feed-posts')) return;
+      const unreadCount = list.querySelectorAll('a.post-link.unread').length;
+      const sidebarLink = document.querySelector('#sidebar a[href="#' + anchorId + '"]');
+      if (sidebarLink) {
+        sidebarLink.textContent = sidebarLink.textContent.replace(/\(\d+\)$/, '(' + unreadCount + ')');
+        if (unreadCount === 0) {
+          sidebarLink.style.fontWeight = 'normal';
+          sidebarLink.style.textDecoration = 'none';
+          sidebarLink.parentElement && sidebarLink.parentElement.classList.remove('n');
+        } else {
+          sidebarLink.style.fontWeight = 'bold';
+          sidebarLink.style.textDecoration = 'underline';
+          sidebarLink.parentElement && sidebarLink.parentElement.classList.add('n');
+        }
+      }
+    });
+    const totalUnread = document.querySelectorAll('#items a.post-link.unread').length;
+    document.title = document.title.replace(/^\(\d+\/\d+\)/, '(' + totalUnread + '/{{ .Data.TotalPosts }})');
+  }
+
+  function setReadStatus(postUrl, newReadStatus) {
+    // double-encode like user page
+    postUrl = encodeURIComponent(encodeURIComponent(postUrl));
+    return fetch('/api/v1/set-post-read-status/' + postUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'new_has_read=' + encodeURIComponent(newReadStatus)
+    });
+  }
+
+  window.toggleReadStatus = function(event) {
+    const emojiEl = event.target;
+    const linkEl = emojiEl.parentElement.querySelector('a.post-link');
+    if (!linkEl) return;
+
+    const isRead = linkEl.classList.contains('read');
+    const newReadStatus = !isRead;
+    const postUrl = linkEl.href;
+
+    // optimistic toggle
+    if (newReadStatus) {
+      linkEl.classList.remove('unread');
+      linkEl.classList.add('read');
+      emojiEl.textContent = '📜';
+      // unwrap title formatting
+      const titleSpan = linkEl.querySelector('.title');
+      if (titleSpan) titleSpan.innerText = titleSpan.innerText;
+    } else {
+      linkEl.classList.remove('read');
+      linkEl.classList.add('unread');
+      emojiEl.textContent = '💌';
+      const titleSpan = linkEl.querySelector('.title');
+      if (titleSpan) {
+        const raw = titleSpan.innerText;
+        titleSpan.innerHTML = '<b><u>' + escapeHTML(raw) + '</u></b>';
+      }
+    }
+
+    updateSidebarCounts();
+
+    setReadStatus(postUrl, newReadStatus).then(resp => {
+      if (resp.status !== 200) {
+        // revert on failure
+        if (newReadStatus) {
+          // revert to unread
+          linkEl.classList.remove('read');
+          linkEl.classList.add('unread');
+          emojiEl.textContent = '💌';
+          const titleSpan = linkEl.querySelector('.title');
+          if (titleSpan) {
+            const raw = titleSpan.innerText;
+            titleSpan.innerHTML = '<b><u>' + escapeHTML(raw) + '</u></b>';
+          }
+        } else {
+          // revert to read
+            linkEl.classList.remove('unread');
+            linkEl.classList.add('read');
+            emojiEl.textContent = '📜';
+            const titleSpan = linkEl.querySelector('.title');
+            if (titleSpan) titleSpan.innerText = titleSpan.innerText;
+        }
+        updateSidebarCounts();
+      }
+    }).catch(() => {
+      // network failure: revert
+      if (newReadStatus) {
+        linkEl.classList.remove('read');
+        linkEl.classList.add('unread');
+        emojiEl.textContent = '💌';
+        const titleSpan = linkEl.querySelector('.title');
+        if (titleSpan) {
+          const raw = titleSpan.innerText;
+          titleSpan.innerHTML = '<b><u>' + escapeHTML(raw) + '</u></b>';
+        }
+      } else {
+        linkEl.classList.remove('unread');
+        linkEl.classList.add('read');
+        emojiEl.textContent = '📜';
+        const titleSpan = linkEl.querySelector('.title');
+        if (titleSpan) titleSpan.innerText = titleSpan.innerText;
+      }
+      updateSidebarCounts();
+    });
+  };
+
+  window.visitLink = function(event) {
+    // mimic user page: mark as read then open (respect ctrl/cmd)
+    const a = event.currentTarget;
+    const postUrl = a.href;
+    const openInNewTab = event.ctrlKey || event.metaKey;
+
+    // optimistic mark read
+    if (a.classList.contains('unread')) {
+      a.classList.remove('unread');
+      a.classList.add('read');
+      const emojiEl = a.parentElement.querySelector('.toggle-read-status-emoji');
+      if (emojiEl) emojiEl.textContent = '📜';
+      const titleSpan = a.querySelector('.title');
+      if (titleSpan) titleSpan.innerText = titleSpan.innerText;
+      updateSidebarCounts();
+      setReadStatus(postUrl, true);
+    }
+
+    if (!openInNewTab) {
+      // navigate same tab
+      // allow default action
+    } else {
+      // open in new tab manually then prevent default
+      event.preventDefault();
+      window.open(postUrl, '_blank');
+    }
+  };
+
+  function escapeHTML(str) {
+    return str.replace(/[&<>"']/g, c => ({
+      '&':'&','<':'<','>':'>','"':'"',"'":'&#39;'
+    })[c]);
+  }
+
+  // Initialization (attach handlers if not inline)
+  updateSidebarCounts();
+
+})();
+</script>
+
+{{ template "tail" . }}
+{{ end }}

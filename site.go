@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -566,6 +567,122 @@ func (s *Site) feedDetailsHandler(w http.ResponseWriter, r *http.Request) {
 	s.renderPage(w, r, "feedDetails", feedData)
 }
 
+// uberFeedHandler serves the "uber feed" page aggregating per-feed unread + recent posts.
+func (s *Site) uberFeedHandler(w http.ResponseWriter, r *http.Request) {
+	if !s.loggedIn(r) {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+
+	username := s.username(r)
+	feedURLs := s.db.GetUserFeedURLs(username)
+
+	type perFeed struct {
+		URL         string
+		Title       string
+		UnreadCount int
+		Posts       []*sqlite.UserPostEntry
+		AnchorID    string
+	}
+
+	feedsData := make([]perFeed, 0, len(feedURLs))
+	totalUnread := 0
+	totalPosts := 0
+
+	for _, feedURL := range feedURLs {
+		allPosts := s.db.GetPostsForFeedWithReadStatus(feedURL, username) // DESC by published_at
+		totalPosts += len(allPosts)
+
+		unread := make([]*sqlite.UserPostEntry, 0, 25)
+		read := make([]*sqlite.UserPostEntry, 0, 25)
+
+		for _, p := range allPosts {
+			if !p.IsRead {
+				unread = append(unread, p)
+			} else {
+				read = append(read, p)
+			}
+		}
+
+		unreadCount := len(unread)
+		totalUnread += unreadCount
+
+		display := make([]*sqlite.UserPostEntry, 0, 25)
+		// Take unread first
+		for _, p := range unread {
+			if len(display) >= 25 {
+				break
+			}
+			display = append(display, p)
+		}
+		// Fill with newest read until 25
+		if len(display) < 25 {
+			for _, p := range read {
+				if len(display) >= 25 {
+					break
+				}
+				display = append(display, p)
+			}
+		}
+
+		// Sort chosen posts by date DESC
+		sort.Slice(display, func(i, j int) bool {
+			if display[i].Post.PublishedParsed == nil || display[j].Post.PublishedParsed == nil {
+				return false
+			}
+			return display[i].Post.PublishedParsed.After(*display[j].Post.PublishedParsed)
+		})
+
+		feedObj := s.reaper.GetFeed(feedURL)
+		title := ""
+		if feedObj != nil && strings.TrimSpace(feedObj.Title) != "" {
+			title = feedObj.Title
+		} else {
+			title = s.printDomain(feedURL)
+		}
+
+		feedsData = append(feedsData, perFeed{
+			URL:         feedURL,
+			Title:       title,
+			UnreadCount: unreadCount,
+			Posts:       display,
+			AnchorID:    s.sanitizeAnchorID(title),
+		})
+	}
+
+	// Alphabetical by Title
+	sort.Slice(feedsData, func(i, j int) bool {
+		return strings.ToLower(feedsData[i].Title) < strings.ToLower(feedsData[j].Title)
+	})
+
+	data := struct {
+		Feeds       []perFeed
+		TotalUnread int
+		TotalPosts  int
+	}{
+		Feeds:       feedsData,
+		TotalUnread: totalUnread,
+		TotalPosts:  totalPosts,
+	}
+
+	s.renderPageWithTitle(w, r, "uber", fmt.Sprintf("(%d/%d) - Uber Feed | %s", totalUnread, totalPosts, s.title), data)
+}
+
+// sanitizeAnchorID converts a string to a safe anchor id.
+func (s *Site) sanitizeAnchorID(str string) string {
+	str = strings.TrimSpace(str)
+	if str == "" {
+		return "feed"
+	}
+	re := regexp.MustCompile(`[^a-zA-Z0-9_-]+`)
+	str = re.ReplaceAllString(str, "-")
+	str = strings.Trim(str, "-")
+	if str == "" {
+		return "feed"
+	}
+	return str
+}
+
 // username fetches a client's username based
 // on the sessionToken that user has set. username
 // will return "" if there is no sessionToken.
@@ -708,6 +825,44 @@ func (s *Site) renderPage(w http.ResponseWriter, r *http.Request, page string, d
 	}
 
 	w.Header().Set("Content-Type", http.DetectContentType([]byte(page)))
+}
+
+// renderPageWithTitle is like renderPage but allows explicit title override.
+func (s *Site) renderPageWithTitle(w http.ResponseWriter, r *http.Request, templateName string, title string, data any) {
+	pageData := struct {
+		Title      string
+		Username   string
+		LoggedIn   bool
+		CutePhrase string
+		Data       any
+	}{
+		Title:      title,
+		Username:   s.username(r),
+		LoggedIn:   s.loggedIn(r),
+		CutePhrase: s.randomCutePhrase(),
+		Data:       data,
+	}
+
+	if constants.DEBUG_MODE {
+		funcMap := template.FuncMap{
+			"printDomain": s.printDomain,
+			"timeSince":   s.timeSince,
+			"trimSpace":   strings.TrimSpace,
+			"escapeURL":   url.QueryEscape,
+			"makeSlice": func(args ...interface{}) []interface{} {
+				return args
+			},
+		}
+		tmplFiles := filepath.Join("files", "*.tmpl.html")
+		templates = template.Must(template.New("whatever").Funcs(funcMap).ParseGlob(tmplFiles))
+	}
+
+	err := templates.ExecuteTemplate(w, templateName, pageData)
+	if err != nil {
+		s.renderErr("renderPageWithTitle", w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", http.DetectContentType([]byte(templateName)))
 }
 
 // printDomain does a best-effort uri parse and

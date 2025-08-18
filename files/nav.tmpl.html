@@ -7,8 +7,10 @@
 		<a href="/">Mire</a>
 		{{ end }}
 	</h2>
+	
 	{{ if .LoggedIn }}
 	<a href="/u/{{ .Username }}">home</a>
+	<a href="/uber">uber</a>
 	{{ end }}
 
 	<a href="/discover">discover</a>

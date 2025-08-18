@@ -87,6 +87,7 @@ func buildRouter(s *Site) *chi.Mux {
 	router.Post("/logout", s.logoutHandler)
 	router.Post("/register", s.registerHandler)
 	router.Get("/feeds/{url}", s.feedDetailsHandler)
+	router.Get("/uber", s.uberFeedHandler)
 
 	// api functions
 	router.Post("/api/v1/set-post-read-status/{postUrl}", s.apiSetPostReadStatus)
