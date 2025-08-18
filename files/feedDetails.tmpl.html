@@ -25,6 +25,10 @@
 			<button onclick="toggleSubscription(false)" class="btn btn-unsubscribe">
 				Unsubscribe
 			</button>
+			<div style="margin-top:0.5rem;">
+				<span class="puny" style="">toggle favorite →</span>
+				<a href="javascript:void(0);" onclick="toggleFavoriteFeed('{{ .Data.FeedURL }}', this)" title="Toggle favorite feed" class="{{ if .Data.IsFavorite }}favorite-link{{ else }}not-favorite-link{{ end }}">{{ if .Data.IsFavorite }}🌕{{ else }}🌑{{ end }}</a>
+			</div>
 			{{ else }}
 			<button onclick="toggleSubscription(true)" class="btn btn-subscribe">
 				Subscribe
@@ -221,6 +225,40 @@
 			// Could add error handling here to revert UI changes if needed
 		}
 	}
+
+	function toggleFavoriteFeed(feedUrl, element) {
+		if (!element) {
+			return;
+		}
+
+		const wasFavorite = element.textContent.trim() === '🌕';
+		const newFeedFavoriteStatus = !wasFavorite;
+
+		// Optimistic UI update
+		element.textContent = newFeedFavoriteStatus ? '🌕' : '🌑';
+		element.className = newFeedFavoriteStatus ? 'favorite-link' : 'not-favorite-link';
+
+		const encodedFeed = encodeURIComponent(feedUrl);
+		fetch(`/api/v1/toggle-favorite-feed-status/${encodedFeed}`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/x-www-form-urlencoded"
+			},
+			body: `new_is_favorite=${encodeURIComponent(newFeedFavoriteStatus)}`
+		}).then(function (response) {
+			if (response.status !== 200) {
+			// Revert on error
+			element.textContent = wasFavorite ? '🌕' : '🌑';
+			element.className = wasFavorite ? 'favorite-link' : 'not-favorite-link';
+			}
+		}).catch(function (error) {
+			console.error('Error toggling favorite:', error);
+			// Revert on error
+			element.textContent = wasFavorite ? '🌕' : '🌑';
+			element.className = wasFavorite ? 'favorite-link' : 'not-favorite-link';
+		});
+	}
+
 	async function toggleSubscription(shouldSubscribe) {
 		const feedUrl = encodeURIComponent('{{ .Data.FeedURL }}');
 		

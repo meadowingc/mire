@@ -540,12 +540,18 @@ func (s *Site) feedDetailsHandler(w http.ResponseWriter, r *http.Request) {
 		isSubscribed = s.db.IsUserSubscribedToFeed(loggedInUsername, decodedURL)
 	}
 
+	var isFavorite bool
+	if loggedInUsername != "" && isSubscribed {
+		isFavorite = s.db.IsFeedFavorite(loggedInUsername, decodedURL)
+	}
+
 	feedData := struct {
 		Feed            *gofeed.Feed
 		Posts           []*sqlite.UserPostEntry
 		FetchFailure    string
 		UserPreferences *user_preferences.UserPreferences
 		IsSubscribed    bool
+		IsFavorite      bool
 		FeedURL         string
 	}{
 		Feed:            feed,
@@ -553,6 +559,7 @@ func (s *Site) feedDetailsHandler(w http.ResponseWriter, r *http.Request) {
 		FetchFailure:    fetchErr,
 		UserPreferences: userPreferences,
 		IsSubscribed:    isSubscribed,
+		IsFavorite:      isFavorite,
 		FeedURL:         decodedURL,
 	}
 

@@ -34,6 +34,7 @@ type UserPostEntry struct {
 }
 
 var listOfSpammyFeeds = []string{
+	".tumblr.com",
 	"//fs.blog",
 	"404media.co",
 	"aftermath.site",
@@ -1035,6 +1036,26 @@ func (db *DB) IsUserSubscribedToFeed(username string, feedURL string) bool {
 	}
 
 	return count > 0
+}
+
+// IsFeedFavorite checks if a feed is marked favorite by the user.
+func (db *DB) IsFeedFavorite(username string, feedURL string) bool {
+	userId := db.GetUserID(username)
+	feedId := db.GetFeedID(feedURL)
+	if feedId == 0 {
+		return false
+	}
+
+	var isFavorite bool
+	err := db.sql.QueryRow(`SELECT is_favorite FROM subscribe WHERE user_id=? AND feed_id=?`, userId, feedId).Scan(&isFavorite)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return false
+		}
+		log.Printf("Error checking if feed is favorite: %v", err)
+		return false
+	}
+	return isFavorite
 }
 
 // Unsubscribe removes a user's subscription to a specific feed
