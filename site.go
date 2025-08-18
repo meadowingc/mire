@@ -593,8 +593,8 @@ func (s *Site) uberFeedHandler(w http.ResponseWriter, r *http.Request) {
 		allPosts := s.db.GetPostsForFeedWithReadStatus(feedURL, username) // DESC by published_at
 		totalPosts += len(allPosts)
 
-		unread := make([]*sqlite.UserPostEntry, 0, 25)
-		read := make([]*sqlite.UserPostEntry, 0, 25)
+		unread := make([]*sqlite.UserPostEntry, 0, 12)
+		read := make([]*sqlite.UserPostEntry, 0, 12)
 
 		for _, p := range allPosts {
 			if !p.IsRead {
@@ -607,18 +607,18 @@ func (s *Site) uberFeedHandler(w http.ResponseWriter, r *http.Request) {
 		unreadCount := len(unread)
 		totalUnread += unreadCount
 
-		display := make([]*sqlite.UserPostEntry, 0, 25)
+		display := make([]*sqlite.UserPostEntry, 0, 12)
 		// Take unread first
 		for _, p := range unread {
-			if len(display) >= 25 {
+			if len(display) >= 12 {
 				break
 			}
 			display = append(display, p)
 		}
-		// Fill with newest read until 25
-		if len(display) < 25 {
+		// Fill with newest read until 12
+		if len(display) < 12 {
 			for _, p := range read {
-				if len(display) >= 25 {
+				if len(display) >= 12 {
 					break
 				}
 				display = append(display, p)

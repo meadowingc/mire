@@ -118,7 +118,7 @@ html, body { max-width: none !important; width: 100%; margin: 0; }
 
   <div id="items">
     {{- range .Data.Feeds }}
-      <h2 id="{{ .AnchorID }}"><a href="#{{ .AnchorID }}">{{ .Title }}</a></h2>
+      <h2 id="{{ .AnchorID }}"><a href="/feeds/{{ .URL | escapeURL }}">{{ .Title }}</a> <a href="#{{ .AnchorID }}" class="puny" style="font-weight:normal; text-decoration:none; margin-left:.4rem;">#</a></h2>
       <ul class="uber-feed-posts" data-anchor="{{ .AnchorID }}">
       {{- range .Posts }}
         {{- $t := .Post.PublishedParsed -}}
