@@ -567,8 +567,8 @@ func (s *Site) feedDetailsHandler(w http.ResponseWriter, r *http.Request) {
 	s.renderPage(w, r, "feedDetails", feedData)
 }
 
-// uberFeedHandler serves the "uber feed" page aggregating per-feed unread + recent posts.
-func (s *Site) uberFeedHandler(w http.ResponseWriter, r *http.Request) {
+// splitFeedHandler serves the "split feed" page aggregating per-feed unread + recent posts.
+func (s *Site) splitFeedHandler(w http.ResponseWriter, r *http.Request) {
 	if !s.loggedIn(r) {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
@@ -670,7 +670,7 @@ func (s *Site) uberFeedHandler(w http.ResponseWriter, r *http.Request) {
 		UserPreferences: userPreferences,
 	}
 
-	s.renderPageWithTitle(w, r, "uber", fmt.Sprintf("(%d/%d) - Uber Feed | %s", totalUnread, totalPosts, s.title), data)
+	s.renderPageWithTitle(w, r, "split", fmt.Sprintf("(%d/%d) - Split View | %s", totalUnread, totalPosts, s.title), data)
 }
 
 // sanitizeAnchorID converts a string to a safe anchor id.
