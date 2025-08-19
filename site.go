@@ -577,6 +577,9 @@ func (s *Site) uberFeedHandler(w http.ResponseWriter, r *http.Request) {
 	username := s.username(r)
 	feedURLs := s.db.GetUserFeedURLs(username)
 
+	// Get user preferences
+	userPreferences := user_preferences.GetUserPreferences(s.db, s.db.GetUserID(username))
+
 	type perFeed struct {
 		URL         string
 		Title       string
@@ -656,13 +659,15 @@ func (s *Site) uberFeedHandler(w http.ResponseWriter, r *http.Request) {
 	})
 
 	data := struct {
-		Feeds       []perFeed
-		TotalUnread int
-		TotalPosts  int
+		Feeds           []perFeed
+		TotalUnread     int
+		TotalPosts      int
+		UserPreferences *user_preferences.UserPreferences
 	}{
-		Feeds:       feedsData,
-		TotalUnread: totalUnread,
-		TotalPosts:  totalPosts,
+		Feeds:           feedsData,
+		TotalUnread:     totalUnread,
+		TotalPosts:      totalPosts,
+		UserPreferences: userPreferences,
 	}
 
 	s.renderPageWithTitle(w, r, "uber", fmt.Sprintf("(%d/%d) - Uber Feed | %s", totalUnread, totalPosts, s.title), data)

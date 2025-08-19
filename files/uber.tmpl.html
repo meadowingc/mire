@@ -169,7 +169,7 @@ html, body { max-width: none !important; width: 100%; margin: 0; }
 
   function setReadStatus(postUrl, newReadStatus) {
     // double-encode like user page
-    postUrl = encodeURIComponent(encodeURIComponent(postUrl));
+    postUrl = encodeURIComponent(postUrl);
     return fetch('/api/v1/set-post-read-status/' + postUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -178,105 +178,137 @@ html, body { max-width: none !important; width: 100%; margin: 0; }
   }
 
   window.toggleReadStatus = function(event) {
-    const emojiEl = event.target;
-    const linkEl = emojiEl.parentElement.querySelector('a.post-link');
-    if (!linkEl) return;
-
-    const isRead = linkEl.classList.contains('read');
+    const element = event.target;
+    const titleElement = element.parentElement.querySelector('a.post-link');
+    if (!titleElement) return;
+    
+    const isRead = titleElement.classList.contains('read');
+    const postUrl = encodeURIComponent(titleElement.href);
     const newReadStatus = !isRead;
-    const postUrl = linkEl.href;
 
-    // optimistic toggle
-    if (newReadStatus) {
-      linkEl.classList.remove('unread');
-      linkEl.classList.add('read');
-      emojiEl.textContent = '📜';
-      // unwrap title formatting
-      const titleSpan = linkEl.querySelector('.title');
-      if (titleSpan) titleSpan.innerText = titleSpan.innerText;
-    } else {
-      linkEl.classList.remove('read');
-      linkEl.classList.add('unread');
-      emojiEl.textContent = '💌';
-      const titleSpan = linkEl.querySelector('.title');
-      if (titleSpan) {
-        const raw = titleSpan.innerText;
-        titleSpan.innerHTML = '<b><u>' + escapeHTML(raw) + '</u></b>';
+    // Find all elements with the same URL across the page (like user.tmpl.html)
+    const allSameUrlElements = Array
+      .from(document.querySelectorAll(`a[href='${titleElement.href}']`))
+      .filter(linkEl => linkEl.classList.contains('post-link'))
+      .map(linkEl => {
+        return {
+          emojiHolder: linkEl.parentElement.querySelector('.toggle-read-status-emoji'),
+          title: linkEl,
+        };
+      });
+
+    // Optimistically update all matching elements
+    allSameUrlElements.forEach(els => {
+      if (newReadStatus) {
+        els.title.classList.remove('unread');
+        els.title.classList.add('read');
+        els.emojiHolder.textContent = '📜';
+        // unwrap title formatting
+        const titleSpan = els.title.querySelector('.title');
+        if (titleSpan) titleSpan.innerText = titleSpan.innerText;
+      } else {
+        els.title.classList.remove('read');
+        els.title.classList.add('unread');
+        els.emojiHolder.textContent = '💌';
+        const titleSpan = els.title.querySelector('.title');
+        if (titleSpan) {
+          const raw = titleSpan.innerText;
+          titleSpan.innerHTML = '<b><u>' + escapeHTML(raw) + '</u></b>';
+        }
       }
-    }
+    });
 
     updateSidebarCounts();
 
-    setReadStatus(postUrl, newReadStatus).then(resp => {
-      if (resp.status !== 200) {
-        // revert on failure
+    setReadStatus(postUrl, newReadStatus).then(function(response) {
+      if (response.status !== 200) {
+        // undo the change on all matching elements
+        allSameUrlElements.forEach(els => {
+          if (newReadStatus) {
+            // revert to unread
+            els.title.classList.remove('read');
+            els.title.classList.add('unread');
+            els.emojiHolder.textContent = '💌';
+            const titleSpan = els.title.querySelector('.title');
+            if (titleSpan) {
+              const raw = titleSpan.innerText;
+              titleSpan.innerHTML = '<b><u>' + escapeHTML(raw) + '</u></b>';
+            }
+          } else {
+            // revert to read
+            els.title.classList.remove('unread');
+            els.title.classList.add('read');
+            els.emojiHolder.textContent = '📜';
+            const titleSpan = els.title.querySelector('.title');
+            if (titleSpan) titleSpan.innerText = titleSpan.innerText;
+          }
+        });
+        updateSidebarCounts();
+      }
+    }).catch(() => {
+      // network failure: revert all matching elements
+      allSameUrlElements.forEach(els => {
         if (newReadStatus) {
-          // revert to unread
-          linkEl.classList.remove('read');
-          linkEl.classList.add('unread');
-          emojiEl.textContent = '💌';
-          const titleSpan = linkEl.querySelector('.title');
+          els.title.classList.remove('read');
+          els.title.classList.add('unread');
+          els.emojiHolder.textContent = '💌';
+          const titleSpan = els.title.querySelector('.title');
           if (titleSpan) {
             const raw = titleSpan.innerText;
             titleSpan.innerHTML = '<b><u>' + escapeHTML(raw) + '</u></b>';
           }
         } else {
-          // revert to read
-            linkEl.classList.remove('unread');
-            linkEl.classList.add('read');
-            emojiEl.textContent = '📜';
-            const titleSpan = linkEl.querySelector('.title');
-            if (titleSpan) titleSpan.innerText = titleSpan.innerText;
+          els.title.classList.remove('unread');
+          els.title.classList.add('read');
+          els.emojiHolder.textContent = '📜';
+          const titleSpan = els.title.querySelector('.title');
+          if (titleSpan) titleSpan.innerText = titleSpan.innerText;
         }
-        updateSidebarCounts();
-      }
-    }).catch(() => {
-      // network failure: revert
-      if (newReadStatus) {
-        linkEl.classList.remove('read');
-        linkEl.classList.add('unread');
-        emojiEl.textContent = '💌';
-        const titleSpan = linkEl.querySelector('.title');
-        if (titleSpan) {
-          const raw = titleSpan.innerText;
-          titleSpan.innerHTML = '<b><u>' + escapeHTML(raw) + '</u></b>';
-        }
-      } else {
+      });
+      updateSidebarCounts();
+    });
+  };
+
+  window.visitLink = async function(event) {
+    // Always prevent default action first (like user.tmpl.html)
+    event.preventDefault();
+
+    // Use currentTarget to get the actual <a> element, not the clicked child element
+    const element = event.currentTarget;
+    const postUrl = encodeURIComponent(element.href);
+
+    // Find all elements with the same URL and mark them as read (like user.tmpl.html)
+    const allSameUrlElements = Array
+      .from(document.querySelectorAll(`a[href='${element.href}']`))
+      .filter(linkEl => linkEl.classList.contains('post-link'))
+      .map(linkEl => {
+        return linkEl.parentElement.querySelector('.toggle-read-status-emoji');
+      });
+
+    // Optimistically mark all matching elements as read
+    allSameUrlElements.forEach(emojiEl => {
+      const linkEl = emojiEl.parentElement.querySelector('a.post-link');
+      if (linkEl) {
         linkEl.classList.remove('unread');
         linkEl.classList.add('read');
         emojiEl.textContent = '📜';
         const titleSpan = linkEl.querySelector('.title');
         if (titleSpan) titleSpan.innerText = titleSpan.innerText;
       }
-      updateSidebarCounts();
     });
-  };
 
-  window.visitLink = function(event) {
-    // mimic user page: mark as read then open (respect ctrl/cmd)
-    const a = event.currentTarget;
-    const postUrl = a.href;
-    const openInNewTab = event.ctrlKey || event.metaKey;
+    updateSidebarCounts();
 
-    // optimistic mark read
-    if (a.classList.contains('unread')) {
-      a.classList.remove('unread');
-      a.classList.add('read');
-      const emojiEl = a.parentElement.querySelector('.toggle-read-status-emoji');
-      if (emojiEl) emojiEl.textContent = '📜';
-      const titleSpan = a.querySelector('.title');
-      if (titleSpan) titleSpan.innerText = titleSpan.innerText;
-      updateSidebarCounts();
-      setReadStatus(postUrl, true);
-    }
+    // Always mark the post as read
+    await setReadStatus(postUrl, true);
 
-    if (!openInNewTab) {
-      // navigate same tab
-      // allow default action
+    const openInNewTab = {{ if .Data.UserPreferences.OpenLinksInNewTab }}true{{ else }}false{{ end }};
+    if (openInNewTab || event.ctrlKey || event.metaKey) {
+      // Open the link in a new tab
+      window.open(element.href, "_blank");
     } else {
-      // open in new tab manually then prevent default
-      event.preventDefault();
-      window.open(postUrl, '_blank');
+      // Navigate to the link in the current tab
+      window.location.href = element.href;
     }
   };
 
