@@ -703,8 +703,6 @@ func (db *DB) GetLatestPostsForDiscover(limit int) []*Post {
         ORDER BY p.published_at DESC
         LIMIT ?`
 
-	fmt.Printf("Query: %s", query)
-
 	rows, err := db.sql.Query(query, limit)
 	if err != nil {
 		log.Fatal(err)
