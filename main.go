@@ -2,13 +2,16 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"codeberg.org/meadowingc/mire/constants"
+	"github.com/fatih/color"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
@@ -56,11 +59,7 @@ func main() {
 
 func buildRouter(s *Site) *chi.Mux {
 	router := chi.NewRouter()
-	router.Use(middleware.Logger)
-
-	// if constants.DEBUG_MODE {
-	//   router.Use(middleware.Logger)
-	// }
+	router.Use(Logger)
 
 	router.Use(middleware.Heartbeat("/ping"))
 	router.Use(middleware.SetHeader("X-Clacks-Overhead", "GNU Terry Pratchett"))
@@ -104,4 +103,102 @@ func buildRouter(s *Site) *chi.Mux {
 	})
 
 	return router
+}
+
+// Logger is a custom middleware that logs HTTP requests without IP addresses
+// for GDPR compliance
+func Logger(next http.Handler) http.Handler {
+	// Define color functions
+	gray := color.New(color.FgHiBlack).SprintFunc()
+	blue := color.New(color.FgBlue).SprintFunc()
+	magenta := color.New(color.FgMagenta).SprintFunc()
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		// Create a response writer wrapper to capture status code
+		ww := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+
+		// Process the request
+		next.ServeHTTP(ww, r)
+
+		// Log the request details (without IP address for GDPR compliance)
+		duration := time.Since(start)
+
+		// Determine log level and status color based on status code
+		var logLevel string
+		var statusStr string
+		switch {
+		case ww.statusCode >= 500:
+			logLevel = "ERROR"
+			statusStr = color.New(color.FgRed).Sprintf("%d", ww.statusCode)
+		case ww.statusCode >= 400:
+			logLevel = "WARN"
+			statusStr = color.New(color.FgYellow).Sprintf("%d", ww.statusCode)
+		case ww.statusCode >= 300:
+			logLevel = "INFO"
+			statusStr = color.New(color.FgCyan).Sprintf("%d", ww.statusCode)
+		case ww.statusCode >= 200:
+			logLevel = "INFO"
+			statusStr = color.New(color.FgGreen).Sprintf("%d", ww.statusCode)
+		default:
+			logLevel = "INFO"
+			statusStr = color.New(color.FgWhite).Sprintf("%d", ww.statusCode)
+		}
+
+		// Format duration with appropriate color
+		var durationStr string
+		if duration > 500*time.Millisecond {
+			durationStr = color.New(color.FgRed).Sprintf("%v", duration)
+		} else if duration > 100*time.Millisecond {
+			durationStr = color.New(color.FgYellow).Sprintf("%v", duration)
+		} else {
+			durationStr = color.New(color.FgGreen).Sprintf("%v", duration)
+		}
+
+		// Format response size
+		var sizeStr string
+		if ww.bytesWritten > 1024*1024 {
+			sizeStr = fmt.Sprintf("%.1fMB", float64(ww.bytesWritten)/(1024*1024))
+		} else if ww.bytesWritten > 1024 {
+			sizeStr = fmt.Sprintf("%.1fKB", float64(ww.bytesWritten)/1024)
+		} else {
+			sizeStr = fmt.Sprintf("%dB", ww.bytesWritten)
+		}
+
+		log.Printf("%s %s %s %s %s %s",
+			gray(fmt.Sprintf("[%s]", logLevel)), // [INFO] in gray
+			blue(r.Method),                      // GET in blue
+			magenta(r.URL.Path),                 // /path in magenta
+			statusStr,                           // 200 in appropriate color
+			durationStr,                         // 2ms in appropriate color
+			gray(fmt.Sprintf("(%s)", sizeStr)),  // (1.2KB) in gray
+		)
+	})
+}
+
+// responseWriter is a wrapper to capture the status code
+type responseWriter struct {
+	http.ResponseWriter
+	statusCode   int
+	bytesWritten int
+	wroteHeader  bool
+}
+
+func (rw *responseWriter) WriteHeader(code int) {
+	if rw.wroteHeader {
+		return
+	}
+	rw.statusCode = code
+	rw.wroteHeader = true
+	rw.ResponseWriter.WriteHeader(code)
+}
+
+func (rw *responseWriter) Write(b []byte) (int, error) {
+	if !rw.wroteHeader {
+		rw.WriteHeader(http.StatusOK)
+	}
+	n, err := rw.ResponseWriter.Write(b)
+	rw.bytesWritten += n
+	return n, err
 }
