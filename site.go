@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"html/template"
@@ -233,6 +234,62 @@ func (s *Site) userBlogrollHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.renderPage(w, r, "blogroll", data)
+}
+
+type opmlXML struct {
+	XMLName xml.Name `xml:"opml"`
+	Version string   `xml:"version,attr"`
+	Head    opmlHead `xml:"head"`
+	Body    opmlBody `xml:"body"`
+}
+
+type opmlHead struct {
+	Title string `xml:"title"`
+}
+
+type opmlBody struct {
+	Outlines []opmlOutline `xml:"outline"`
+}
+
+type opmlOutline struct {
+	Text    string `xml:"text,attr"`
+	Type    string `xml:"type,attr"`
+	XMLURL  string `xml:"xmlUrl,attr"`
+	HTMLURL string `xml:"htmlUrl,attr,omitempty"`
+}
+
+func (s *Site) userBlogrollOPMLHandler(w http.ResponseWriter, r *http.Request) {
+	username := r.PathValue("username")
+
+	if !s.db.UserExists(username) {
+		http.NotFound(w, r)
+		return
+	}
+
+	urls := s.db.GetUserFeedURLs(username)
+
+	outlines := make([]opmlOutline, 0, len(urls))
+	for _, feedURL := range urls {
+		outlines = append(outlines, opmlOutline{
+			Text:   s.printDomain(feedURL),
+			Type:   "rss",
+			XMLURL: feedURL,
+		})
+	}
+
+	doc := opmlXML{
+		Version: "2.0",
+		Head:    opmlHead{Title: username + "'s blogroll on mire"},
+		Body:    opmlBody{Outlines: outlines},
+	}
+
+	w.Header().Set("Content-Type", "text/x-opml+xml; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s-blogroll.opml\"", username))
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(xml.Header))
+	enc := xml.NewEncoder(w)
+	enc.Indent("", "  ")
+	enc.Encode(doc)
 }
 
 func (s *Site) settingsHandler(w http.ResponseWriter, r *http.Request) {

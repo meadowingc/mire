@@ -11,7 +11,7 @@
 	</p>
 	{{ else }} <!-- if eq $length 0 -->
 
-	<p class="puny" style="margin-top: 2em;"><i>{{.Data.User}}</i> is subscribed to {{$length}} feeds.</p>
+	<p class="puny" style="margin-top: 2em;"><i>{{.Data.User}}</i> is subscribed to {{$length}} feeds. (<a href="/u/{{.Data.User}}/blogroll/opml">OPML</a>)</p>
 
 	<ul>
 		{{ range .Data.Items }}

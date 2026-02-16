@@ -73,6 +73,7 @@ func buildRouter(s *Site) *chi.Mux {
 	router.Get("/about", s.aboutHandler)
 	router.Get("/u/{username}", s.userHandler)
 	router.Get("/u/{username}/blogroll", s.userBlogrollHandler)
+	router.Get("/u/{username}/blogroll/opml", s.userBlogrollOPMLHandler)
 	router.Get("/static/{file}", s.staticHandler)
 	router.Get("/discover", s.discoverHandler)
 	router.Get("/random", s.visitRandomPostHandler)
