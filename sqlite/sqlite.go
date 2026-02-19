@@ -132,6 +132,7 @@ var listOfSpammyFeeds = []string{
 	"web.hypothes.is",
 	"wolnelektury.pl",
 	"youtube.com",
+	"sapo.pt",
 }
 
 // Known feed aggregator domains that should be filtered by feed URL, not post URL
@@ -857,15 +858,25 @@ func (db *DB) GetPostsForUser(username string, limit int) []*UserPostEntry {
 func (db *DB) GetRandomPost() *Post {
 	var p Post
 
-	// Select a random post from a feed that has at least one post
-	err := db.sql.QueryRow(`
-        SELECT title, url, published_at 
-        FROM post 
-        WHERE feed_id IN (SELECT id FROM feed WHERE EXISTS (SELECT 1 FROM post WHERE feed_id = feed.id))
-        ORDER BY RANDOM() 
-        LIMIT 1
-    `).Scan(&p.Title, &p.URL, &p.PublishedDatetime)
+	query := `
+        SELECT p.title, p.url, p.published_at 
+        FROM post p
+        JOIN feed f ON p.feed_id = f.id
+        WHERE 1=1`
 
+	// Filter out spammy feeds (same filters as discover)
+	for _, domain := range listOfSpammyFeeds {
+		query += fmt.Sprintf(" AND p.url NOT LIKE '%%%s%%'", domain)
+	}
+	for _, aggregator := range knownFeedAggregators {
+		query += fmt.Sprintf(" AND f.url NOT LIKE '%%%s%%'", aggregator)
+	}
+
+	query += `
+        ORDER BY RANDOM() 
+        LIMIT 1`
+
+	err := db.sql.QueryRow(query).Scan(&p.Title, &p.URL, &p.PublishedDatetime)
 	if err != nil {
 		log.Fatal(err)
 	}
