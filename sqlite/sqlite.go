@@ -129,6 +129,7 @@ var listOfSpammyFeeds = []string{
 	"sidebar.io",
 	"simplecast.com",
 	"slashdot.org",
+	"socialwebfoundation.org",
 	"stackexchange.com",
 	"status.cafe",
 	"talk.tiddlywiki.org",
