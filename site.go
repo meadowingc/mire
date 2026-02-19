@@ -36,6 +36,11 @@ type Site struct {
 
 	// site database handle
 	db *sqlite.DB
+
+	// in-memory cache for /discover
+	discoverCache     []*sqlite.Post
+	discoverCacheTime time.Time
+	discoverCacheMu   sync.Mutex
 }
 
 var templates *template.Template
@@ -88,8 +93,17 @@ func (s *Site) aboutHandler(w http.ResponseWriter, r *http.Request) {
 	s.renderPage(w, r, "about", globalSiteStats)
 }
 
+const discoverCacheTTL = 4 * time.Hour
+
 func (s *Site) discoverHandler(w http.ResponseWriter, r *http.Request) {
-	items := s.db.GetLatestPostsForDiscover(100)
+	s.discoverCacheMu.Lock()
+	if s.discoverCache == nil || time.Since(s.discoverCacheTime) > discoverCacheTTL {
+		s.discoverCache = s.db.GetLatestPostsForDiscover(100)
+		s.discoverCacheTime = time.Now()
+	}
+	items := s.discoverCache
+	s.discoverCacheMu.Unlock()
+
 	s.renderPage(w, r, "discover", items)
 }
 
