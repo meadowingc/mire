@@ -41,6 +41,7 @@ var listOfSpammyFeeds = []string{
 	".tumblr.com",
 	"//fs.blog",
 	"//go.dev",
+	"//om.co",
 	"404media.co",
 	"aeon.co",
 	"aftermath.site",
@@ -90,6 +91,7 @@ var listOfSpammyFeeds = []string{
 	"kill-the-newsletter.com",
 	"lemonde.fr",
 	"librarystack.org",
+	"libsyn.com",
 	"lifehacker.com",
 	"longreads.com",
 	"macstories.net",
@@ -123,6 +125,7 @@ var listOfSpammyFeeds = []string{
 	"sapo.pt",
 	"sapo.pt",
 	"scotthyoung.com",
+	"sentry.io",
 	"sidebar.io",
 	"simplecast.com",
 	"slashdot.org",
@@ -130,6 +133,7 @@ var listOfSpammyFeeds = []string{
 	"status.cafe",
 	"talk.tiddlywiki.org",
 	"technologyreview.com",
+	"tfm.fan",
 	"thecrochetcrowd.com",
 	"themagicalslowcooker.com",
 	"themorningnews.org",
@@ -150,6 +154,7 @@ var listOfSpammyFeeds = []string{
 
 // Known feed aggregator domains that should be filtered by feed URL, not post URL
 var knownFeedAggregators = []string{
+	"daringfireball.net",
 	"feedbin.com",
 	"feedburner.com",
 	"feedle.world",
@@ -157,6 +162,7 @@ var knownFeedAggregators = []string{
 	"feeds.feedburner.com",
 	"granary.io",
 	"kill-the-newsletter.com",
+	"libsyn.com",
 	"sidebar.io",
 }
 
@@ -871,23 +877,31 @@ func (db *DB) GetPostsForUser(username string, limit int) []*UserPostEntry {
 func (db *DB) GetRandomPost() *Post {
 	var p Post
 
-	query := `
-        SELECT p.title, p.url, p.published_at 
+	// Two-step random: pick a random feed first, then a random post from it.
+	// This gives every feed equal weight regardless of post count.
+	feedFilter := "WHERE 1=1"
+	for _, aggregator := range knownFeedAggregators {
+		feedFilter += fmt.Sprintf(" AND f.url NOT LIKE '%%%s%%'", aggregator)
+	}
+
+	postFilter := ""
+	for _, domain := range listOfSpammyFeeds {
+		postFilter += fmt.Sprintf(" AND p.url NOT LIKE '%%%s%%'", domain)
+	}
+
+	query := fmt.Sprintf(`
+        SELECT p.title, p.url, p.published_at
         FROM post p
         JOIN feed f ON p.feed_id = f.id
-        WHERE 1=1`
-
-	// Filter out spammy feeds (same filters as discover)
-	for _, domain := range listOfSpammyFeeds {
-		query += fmt.Sprintf(" AND p.url NOT LIKE '%%%s%%'", domain)
-	}
-	for _, aggregator := range knownFeedAggregators {
-		query += fmt.Sprintf(" AND f.url NOT LIKE '%%%s%%'", aggregator)
-	}
-
-	query += `
-        ORDER BY RANDOM() 
-        LIMIT 1`
+        WHERE p.feed_id = (
+            SELECT f.id FROM feed f
+            %s
+            AND EXISTS (SELECT 1 FROM post WHERE feed_id = f.id)
+            ORDER BY RANDOM()
+            LIMIT 1
+        )%s
+        ORDER BY RANDOM()
+        LIMIT 1`, feedFilter, postFilter)
 
 	err := db.sql.QueryRow(query).Scan(&p.Title, &p.URL, &p.PublishedDatetime)
 	if err != nil {
