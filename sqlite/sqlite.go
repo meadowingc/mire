@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"log"
 	"math/rand"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -219,25 +220,37 @@ func New(path string) *DB {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// fs.ReadDir sorts lexicographically ("10_" < "2_"), so parse versions
+	// first and apply migrations in ascending numeric order
+	type migration struct {
+		version int
+		name    string
+	}
+	migrations := make([]migration, 0, len(files))
 	for _, f := range files {
 		var version int
 		_, err = fmt.Sscanf(f.Name(), "%d_", &version)
 		if err != nil {
 			log.Fatal(err)
 		}
+		migrations = append(migrations, migration{version: version, name: f.Name()})
+	}
+	sort.Slice(migrations, func(i, j int) bool { return migrations[i].version < migrations[j].version })
 
+	for _, m := range migrations {
 		// Apply migration if not already applied
-		if version > latestVersion {
-			fileData, _ := fs.ReadFile(migrationFiles, "migrations/"+f.Name())
+		if m.version > latestVersion {
+			fileData, _ := fs.ReadFile(migrationFiles, "migrations/"+m.name)
 			_, err := db.Exec(string(fileData))
 			if err != nil {
-				log.Fatalf("Failed to apply migration %s: %v", f.Name(), err)
+				log.Fatalf("Failed to apply migration %s: %v", m.name, err)
 			}
-			_, err = db.Exec(`INSERT INTO schema_migrations (version) VALUES (?)`, version)
+			_, err = db.Exec(`INSERT INTO schema_migrations (version) VALUES (?)`, m.version)
 			if err != nil {
-				log.Fatalf("Failed to record migration version %d: %v", version, err)
+				log.Fatalf("Failed to record migration version %d: %v", m.version, err)
 			}
-			fmt.Printf("Applied migration %s\n", f.Name())
+			fmt.Printf("Applied migration %s\n", m.name)
 		}
 	}
 
@@ -685,6 +698,86 @@ func (db *DB) WriteFeed(url string) {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+// FeedMetadata holds the feed-level metadata the site renders (title,
+// description and the feed's own site link) sourced from the database.
+type FeedMetadata struct {
+	Title       string
+	Description string
+	Link        string
+}
+
+// UpdateFeedMetadata stores the feed metadata from a successful refresh.
+// The write is skipped when the stored values already match, to avoid
+// thousands of no-op row rewrites on every refresh cycle.
+func (db *DB) UpdateFeedMetadata(url, title, description, link string) {
+	lock()
+	_, err := db.sql.Exec(`
+		UPDATE feed SET title=?, description=?, link=?
+		WHERE url=?
+		  AND (title IS NOT ? OR description IS NOT ? OR link IS NOT ?)`,
+		title, description, link, url, title, description, link)
+	unlock()
+
+	if err != nil {
+		log.Printf("[err] UpdateFeedMetadata: could not update feed '%s': %v\n", url, err)
+	}
+}
+
+// GetFeedMetadata returns the stored metadata for a feed, or nil if the
+// feed is unknown.
+func (db *DB) GetFeedMetadata(url string) *FeedMetadata {
+	var m FeedMetadata
+	var title, description, link sql.NullString
+
+	err := db.sql.QueryRow("SELECT title, description, link FROM feed WHERE url=?", url).
+		Scan(&title, &description, &link)
+	if err == sql.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	m.Title = title.String
+	m.Description = description.String
+	m.Link = link.String
+	return &m
+}
+
+// GetFeedTitles returns a map from feed URL to stored title for the given
+// feeds. Feeds with no stored title (or unknown feeds) are absent from the
+// map so callers can fall back to their own display logic.
+func (db *DB) GetFeedTitles(urls []string) map[string]string {
+	titles := make(map[string]string, len(urls))
+	if len(urls) == 0 {
+		return titles
+	}
+
+	placeholders := make([]string, len(urls))
+	args := make([]any, len(urls))
+	for i, u := range urls {
+		placeholders[i] = "?"
+		args[i] = u
+	}
+
+	rows, err := db.sql.Query(fmt.Sprintf(
+		"SELECT url, title FROM feed WHERE url IN (%s) AND title IS NOT NULL AND title != ''",
+		strings.Join(placeholders, ",")), args...)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var u, t string
+		if err := rows.Scan(&u, &t); err != nil {
+			log.Fatal(err)
+		}
+		titles[u] = t
+	}
+	return titles
 }
 
 func (db *DB) SetFeedFetchError(url string, fetchErr string) error {

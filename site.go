@@ -404,9 +404,6 @@ func (s *Site) settingsSubscribeHandler(w http.ResponseWriter, r *http.Request) 
 			// save feed to dabase
 			s.db.WriteFeed(u)
 
-			// add empty feed entry to reaper
-			s.reaper.AddFeedStub(u)
-
 			// try to get posts and save them
 			newFeed, err := s.reaper.Fetch(u)
 			if err != nil {
@@ -600,32 +597,24 @@ func (s *Site) feedDetailsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	feed := s.reaper.GetFeed(decodedURL)
-	if feed == nil {
-		// Feed not found in reaper, maybe it exists in DB but hasn't been loaded
-		// Try to fetch it first
-		if !s.reaper.HasFeed(decodedURL) {
-			// Add the feed to reaper and try to fetch it
-			s.reaper.AddFeedStub(decodedURL)
-			fetchedFeed, err := s.reaper.Fetch(decodedURL)
-			if err != nil {
-				// If we can't fetch it, create a minimal feed object
-				feed = &gofeed.Feed{
-					Title:    decodedURL,
-					FeedLink: decodedURL,
-					Link:     decodedURL,
-				}
-			} else {
-				feed = fetchedFeed
-			}
-		} else {
-			// Feed exists in reaper but GetFeed returned nil - this shouldn't happen
-			// Create a minimal feed object as fallback
-			feed = &gofeed.Feed{
-				Title:    decodedURL,
-				FeedLink: decodedURL,
-				Link:     decodedURL,
-			}
+	feed := &gofeed.Feed{
+		Title:    decodedURL,
+		FeedLink: decodedURL,
+		Link:     decodedURL,
+	}
+
+	if meta := s.db.GetFeedMetadata(decodedURL); meta != nil {
+		if strings.TrimSpace(meta.Title) != "" {
+			feed.Title = meta.Title
+		}
+		feed.Description = meta.Description
+		if meta.Link != "" {
+			feed.Link = meta.Link
+		}
+	} else {
+		// Feed unknown to the database — try to fetch it on the fly
+		if fetchedFeed, err := s.reaper.Fetch(decodedURL); err == nil {
+			feed = fetchedFeed
 		}
 	}
 
@@ -676,6 +665,7 @@ func (s *Site) splitFeedHandler(w http.ResponseWriter, r *http.Request) {
 
 	const perFeedLimit = 12
 	splitData := s.db.GetPostsForSplitView(username, perFeedLimit)
+	feedTitles := s.db.GetFeedTitles(feedURLs)
 
 	type perFeed struct {
 		URL         string
@@ -741,11 +731,8 @@ func (s *Site) splitFeedHandler(w http.ResponseWriter, r *http.Request) {
 			return display[i].Post.PublishedParsed.After(*display[j].Post.PublishedParsed)
 		})
 
-		feedObj := s.reaper.GetFeed(feedURL)
-		title := ""
-		if feedObj != nil && strings.TrimSpace(feedObj.Title) != "" {
-			title = feedObj.Title
-		} else {
+		title := feedTitles[feedURL]
+		if strings.TrimSpace(title) == "" {
 			title = s.printDomain(feedURL)
 		}
 
@@ -1159,8 +1146,7 @@ func (s *Site) apiToggleSubscriptionHandler(w http.ResponseWriter, r *http.Reque
 
 		// Add to reaper if not already there
 		if !s.reaper.HasFeed(feedUrl) {
-			s.reaper.AddFeedStub(feedUrl)
-			// Try to fetch the feed in the background
+			// Try to fetch the feed in the background (Fetch registers it)
 			go func() {
 				if _, err := s.reaper.Fetch(feedUrl); err != nil {
 					log.Printf("Failed to fetch feed %s: %v", feedUrl, err)

@@ -231,6 +231,9 @@ func TestE2ESplitView(t *testing.T) {
 	})
 	db.SetReadStatus("dave", "https://split.example.com/1", true)
 
+	// title is served from the feed metadata in the database
+	db.UpdateFeedMetadata("https://split.example.com/feed", "Daves Split Feed", "", "")
+
 	resp := get(t, server, "/split", cookie)
 	if resp.Code != http.StatusOK {
 		t.Fatalf("expected 200 for split view, got %d", resp.Code)
@@ -242,6 +245,9 @@ func TestE2ESplitView(t *testing.T) {
 	// one read + one unread post → (1/2) in the title
 	if !strings.Contains(body, "(1/2)") {
 		t.Error("expected split view title to show 1 unread out of 2 posts")
+	}
+	if !strings.Contains(body, "Daves Split Feed") {
+		t.Error("expected split view to show the feed title from the database")
 	}
 }
 

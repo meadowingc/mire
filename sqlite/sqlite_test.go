@@ -138,3 +138,43 @@ func TestSplitViewPosts(t *testing.T) {
 		t.Errorf("Expected all 3 old unread posts in result, got %d", unreadSeen)
 	}
 }
+
+func TestUpdateFeedMetadata(t *testing.T) {
+	dbName := "sqlite_go_test_meta.db"
+	os.Remove(dbName)
+	db := New(dbName)
+	defer os.Remove(dbName)
+
+	feedURL := "https://meta.example.com/feed"
+	db.WriteFeed(feedURL)
+
+	// initially NULL -> falls back to empty strings
+	if m := db.GetFeedMetadata(feedURL); m == nil || m.Title != "" || m.Description != "" || m.Link != "" {
+		t.Fatalf("expected empty metadata for new feed, got %+v", m)
+	}
+
+	// first write populates
+	db.UpdateFeedMetadata(feedURL, "Meta Feed", "a feed about meta", "https://meta.example.com")
+	m := db.GetFeedMetadata(feedURL)
+	if m.Title != "Meta Feed" || m.Description != "a feed about meta" || m.Link != "https://meta.example.com" {
+		t.Fatalf("expected metadata after first write, got %+v", m)
+	}
+
+	// identical rewrite is a no-op but must not corrupt values
+	db.UpdateFeedMetadata(feedURL, "Meta Feed", "a feed about meta", "https://meta.example.com")
+	if m = db.GetFeedMetadata(feedURL); m.Title != "Meta Feed" {
+		t.Fatalf("metadata changed after identical rewrite: %+v", m)
+	}
+
+	// changed title is picked up
+	db.UpdateFeedMetadata(feedURL, "Meta Feed v2", "a feed about meta", "https://meta.example.com")
+	if m = db.GetFeedMetadata(feedURL); m.Title != "Meta Feed v2" {
+		t.Fatalf("expected updated title, got %+v", m)
+	}
+
+	// GetFeedTitles only returns feeds with a title
+	titles := db.GetFeedTitles([]string{feedURL, "https://unknown.example.com/feed"})
+	if titles[feedURL] != "Meta Feed v2" || len(titles) != 1 {
+		t.Fatalf("unexpected GetFeedTitles result: %v", titles)
+	}
+}

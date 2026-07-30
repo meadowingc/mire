@@ -26,31 +26,10 @@ type PostSaveRequest struct {
 	Date     time.Time
 }
 
-type FeedHolder struct {
-	// Feed holds feed metadata only (title, link, description, dates).
-	// Items are never retained here — the database is the source of truth
-	// for posts, and keeping every parsed item in RAM duplicated it.
-	Feed        *gofeed.Feed
-	LastFetched time.Time
-}
-
-// slimFeed strips a parsed feed down to the metadata the site actually
-// reads (templates use Title, Link and Description), dropping all items.
-func slimFeed(f *gofeed.Feed) *gofeed.Feed {
-	return &gofeed.Feed{
-		Title:           f.Title,
-		Link:            f.Link,
-		FeedLink:        f.FeedLink,
-		Description:     f.Description,
-		Published:       f.Published,
-		PublishedParsed: f.PublishedParsed,
-	}
-}
-
 type Reaper struct {
-	// internal list of all rss feeds where the map
-	// key represents the url of the feed (which should be unique)
-	feeds map[string]*FeedHolder
+	// tracks when each feed (map key = feed url) was last fetched; feed
+	// metadata lives in the database (feed.title/description/link), not here
+	feeds map[string]time.Time
 
 	saverChannel chan *PostSaveRequest
 
@@ -68,7 +47,7 @@ func New(db *sqlite.DB) *Reaper {
 	}
 
 	r := &Reaper{
-		feeds:        make(map[string]*FeedHolder),
+		feeds:        make(map[string]time.Time),
 		saverChannel: make(chan *PostSaveRequest),
 		db:           db,
 	}
@@ -96,20 +75,12 @@ func (r *Reaper) start() {
 
 		lock()
 		for _, url := range urls {
-			// Setting FeedLink lets us defer fetching
-			feed := &gofeed.Feed{
-				FeedLink: url,
-			}
-
-			// trigged immediate refresh by setting LastFetched to a time in the past
-			// (one second past the staleness boundary so the strict Before
-			// comparison still holds when time.Now() has coarse granularity,
-			// e.g. on Windows where two calls can return the same instant)
-			lastRefreshed := time.Now().Add(-timeToBecomeStale - time.Second)
-			r.feeds[url] = &FeedHolder{
-				Feed:        feed,
-				LastFetched: lastRefreshed,
-			}
+			// trigger immediate refresh by setting the last fetch time to the
+			// past (one second past the staleness boundary so the strict
+			// Before comparison still holds when time.Now() has coarse
+			// granularity, e.g. on Windows where two calls can return the
+			// same instant)
+			r.feeds[url] = time.Now().Add(-timeToBecomeStale - time.Second)
 		}
 		unlock()
 	}
@@ -222,10 +193,8 @@ func (r *Reaper) sanitizeFeedItems(feed *gofeed.Feed) {
 	feed.Items = uniqueItems
 }
 
-func (r *Reaper) updateFeedAndSaveNewItemsToDb(fh *FeedHolder) {
-	f := fh.Feed
-
-	if _, ok := r.feeds[f.FeedLink]; !ok {
+func (r *Reaper) updateFeedAndSaveNewItemsToDb(feedLink string) {
+	if _, ok := r.feeds[feedLink]; !ok {
 		log.Printf("[err] reaper:updateFeedAndSaveNewItemsToDb → Tied to fetch a feed that is not known to Reaper")
 		return
 	}
@@ -234,50 +203,27 @@ func (r *Reaper) updateFeedAndSaveNewItemsToDb(fh *FeedHolder) {
 	// the fetch succeeds or not
 	fetchTime := time.Now()
 	lock()
-	r.feeds[f.FeedLink].LastFetched = fetchTime
+	r.feeds[feedLink] = fetchTime
 	unlock()
 
-	newF, err := r.rawFetchFeed(f.FeedLink)
+	newF, err := r.rawFetchFeed(feedLink)
 
 	if err != nil {
-		r.handleFeedFetchFailure(f.FeedLink, err)
+		r.handleFeedFetchFailure(feedLink, err)
 		return
 	}
 
-	newF.FeedLink = f.FeedLink // sometimes this gets overwritten for some reason
+	newF.FeedLink = feedLink // sometimes this gets overwritten for some reason
 
-	// record the successful refresh (timestamp + cleared error) in one write
-	r.db.UpdateFeedRefreshState(f.FeedLink, "", fetchTime)
+	// record the successful refresh (timestamp + cleared error + metadata)
+	r.db.UpdateFeedRefreshState(feedLink, "", fetchTime)
+	r.db.UpdateFeedMetadata(feedLink, newF.Title, newF.Description, newF.Link)
 
 	r.sanitizeFeedItems(newF)
 
-	if newF.PublishedParsed == nil {
-		parsedDate, err := r.db.TryParseDate(newF.Published)
-		if err == nil {
-			// we don't log an error here since we don't really care if the feed
-			// has a date or not
-			newF.PublishedParsed = &parsedDate
-		}
-	}
-
-	if !r.HasFeed(newF.FeedLink) {
-		// NOTE: this should never happen, but if it does, we should add the
-		// feed to the reaper so that we can track it
-		log.Printf("[err] reaper: feed not tracked by reaper but fetched '%s'\n", newF.FeedLink)
-		log.Printf("[err. cont] reaper: adding feed '%s' to reaper\n", newF.FeedLink)
-		r.AddFeedStub(newF.FeedLink)
-	}
-
-	// keep only the metadata in memory; items live in the database
-	lock()
-	r.feeds[newF.FeedLink].Feed = slimFeed(newF)
-	unlock()
-
 	// queue every item for saving; SavePosts skips the ones already in the
 	// database, so there's no need to diff against previously seen items here
-	r.queueFeedItemsForSaving(newF.FeedLink, newF.Items)
-
-	fh.LastFetched = time.Now()
+	r.queueFeedItemsForSaving(feedLink, newF.Items)
 }
 
 func (r *Reaper) queueFeedItemsForSaving(feedLink string, items []*gofeed.Item) {
@@ -298,13 +244,13 @@ func (r *Reaper) refreshAllFeeds() {
 	semaphore := make(chan struct{}, 5)
 	var wg sync.WaitGroup
 
-	for feedLink := range r.feeds {
+	for feedLink, lastFetched := range r.feeds {
 		// if the feed is stale, update it
-		if r.feeds[feedLink].LastFetched.Add(timeToBecomeStale).Before(start) {
+		if lastFetched.Add(timeToBecomeStale).Before(start) {
 			semaphore <- struct{}{} // acquire a token
 			wg.Add(1)               // increment the WaitGroup counter
 
-			go func(feedHolder *FeedHolder) {
+			go func(feedLink string) {
 				defer func() {
 					<-semaphore // release the token when done
 					wg.Done()   // decrement the WaitGroup counter
@@ -315,8 +261,8 @@ func (r *Reaper) refreshAllFeeds() {
 				// `timeToBecomeStale`)
 				time.Sleep(time.Duration(10+rand.Intn(20)) * time.Millisecond)
 
-				r.updateFeedAndSaveNewItemsToDb(feedHolder)
-			}(r.feeds[feedLink])
+				r.updateFeedAndSaveNewItemsToDb(feedLink)
+			}(feedLink)
 		}
 	}
 
@@ -342,35 +288,12 @@ func (r *Reaper) handleFeedFetchFailure(url string, err error) {
 	r.db.UpdateFeedRefreshState(url, err.Error(), time.Now())
 }
 
-// HasFeed checks whether a given url is represented
-// in the reaper cache.
+// HasFeed checks whether a given url is tracked by the reaper.
 func (r *Reaper) HasFeed(url string) bool {
 	if _, ok := r.feeds[url]; ok {
 		return true
 	}
 	return false
-}
-
-// GetFeed returns the metadata (never the items) of a tracked feed,
-// or nil if the feed is unknown to the reaper.
-func (r *Reaper) GetFeed(url string) *gofeed.Feed {
-	if feedHolder, ok := r.feeds[url]; ok {
-		return feedHolder.Feed
-	}
-	return nil
-}
-
-func (r *Reaper) AddFeedStub(url string) {
-	if r.HasFeed(url) {
-		return
-	}
-
-	lock()
-	r.feeds[url] = &FeedHolder{
-		Feed:        &gofeed.Feed{FeedLink: url},
-		LastFetched: time.Now().Add(-timeToBecomeStale), // force refresh
-	}
-	unlock()
 }
 
 func (r *Reaper) RemoveFeed(url string) {
@@ -396,13 +319,22 @@ func (r *Reaper) rawFetchFeed(url string) (*gofeed.Feed, error) {
 	return fp.ParseURL(url)
 }
 
-// Fetch fetches a feed from a given url, tracks its metadata in the reaper,
-// and queues its items for saving to the database. The fully parsed feed
-// (including items) is returned for immediate use — the reaper itself never
-// retains the items in memory.
+// Fetch fetches a feed from a given url, tracks it in the reaper, stores its
+// metadata in the database, and queues its items for saving. The fully
+// parsed feed (including items) is returned for immediate use — the reaper
+// itself never retains anything but the last-fetch time in memory.
+//
+// The feed is tracked even when the fetch fails (with a stale timestamp) so
+// the scheduler keeps retrying it, mirroring what subscribing expects.
 func (r *Reaper) Fetch(url string) (*gofeed.Feed, error) {
 	feed, err := r.rawFetchFeed(url)
 	if err != nil {
+		// register the feed as stale so it stays on the refresh schedule
+		lock()
+		if _, tracked := r.feeds[url]; !tracked {
+			r.feeds[url] = time.Now().Add(-timeToBecomeStale)
+		}
+		unlock()
 		return nil, err
 	}
 
@@ -410,11 +342,10 @@ func (r *Reaper) Fetch(url string) (*gofeed.Feed, error) {
 
 	r.sanitizeFeedItems(feed)
 
+	r.db.UpdateFeedMetadata(url, feed.Title, feed.Description, feed.Link)
+
 	lock()
-	r.feeds[url] = &FeedHolder{
-		Feed:        slimFeed(feed),
-		LastFetched: time.Now(),
-	}
+	r.feeds[url] = time.Now()
 	unlock()
 
 	r.queueFeedItemsForSaving(url, feed.Items)

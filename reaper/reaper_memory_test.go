@@ -42,16 +42,24 @@ func TestFetchDoesNotRetainItemsInMemory(t *testing.T) {
 		t.Fatalf("expected 2 items in returned feed, got %d", len(feed.Items))
 	}
 
-	// ...but the reaper itself must only keep metadata
-	tracked := r.GetFeed(srv.URL)
-	if tracked == nil {
+	// ...while the reaper itself tracks only the last-fetch time
+	if !r.HasFeed(srv.URL) {
 		t.Fatal("expected feed to be tracked by reaper")
 	}
-	if len(tracked.Items) != 0 {
-		t.Fatalf("expected no items retained in reaper memory, got %d", len(tracked.Items))
+
+	// feed metadata must be persisted in the database
+	meta := db.GetFeedMetadata(srv.URL)
+	if meta == nil {
+		t.Fatal("expected feed metadata in db")
 	}
-	if tracked.Title != "Test Feed" {
-		t.Errorf("expected metadata title %q, got %q", "Test Feed", tracked.Title)
+	if meta.Title != "Test Feed" {
+		t.Errorf("expected metadata title %q, got %q", "Test Feed", meta.Title)
+	}
+	if meta.Description != "A test feed" {
+		t.Errorf("expected metadata description %q, got %q", "A test feed", meta.Description)
+	}
+	if titles := db.GetFeedTitles([]string{srv.URL}); titles[srv.URL] != "Test Feed" {
+		t.Errorf("expected GetFeedTitles to return %q, got %v", "Test Feed", titles)
 	}
 
 	// items should land in the database once the batch saver flushes
