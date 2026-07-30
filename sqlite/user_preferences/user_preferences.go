@@ -61,6 +61,8 @@ func GetDefaultUserPreferences() *UserPreferences {
 
 func GetUserPreferences(db *sqlite.DB, userId int) *UserPreferences {
 	userPreferences := GetDefaultUserPreferences()
+	savedPrefs := db.GetAllUserPreferences(userId)
+
 	valPointer := reflect.ValueOf(userPreferences)
 	val := valPointer.Elem()
 	typ := val.Type()
@@ -72,20 +74,10 @@ func GetUserPreferences(db *sqlite.DB, userId int) *UserPreferences {
 			log.Fatalf("GetUserPreferences:: Field %s does not have a 'db' tag", field.Name)
 		}
 
-		preferenceValue := db.GetSingleUserPreference(userId, tag)
-		if preferenceValue == nil {
-			// Preference not found for this user
-			// Set default value
-			defaultValue := field.Tag.Get("default")
-			if defaultValue == "" {
-				log.Fatalf("GetUserPreferences:: Field %s does not have a 'default' tag", field.Name)
-			}
-			preferenceValue = &defaultValue
+		// overwrite the default value if the user has saved this preference
+		if preferenceValue, ok := savedPrefs[tag]; ok {
+			SetFieldValue(val.Field(i), preferenceValue)
 		}
-
-		// set the field value taking into account it's type. Also set the
-		// default value if the preference is not found
-		SetFieldValue(val.Field(i), *preferenceValue)
 	}
 
 	return userPreferences

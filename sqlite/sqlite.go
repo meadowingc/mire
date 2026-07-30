@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"math/rand"
 	"strings"
+	"sync"
 	"time"
 
 	_ "github.com/glebarez/go-sqlite"
@@ -18,6 +20,13 @@ var migrationFiles embed.FS
 
 type DB struct {
 	sql *sql.DB
+
+	// in-memory caches for id lookups that never change once created.
+	// usernames are immutable and feeds are only deleted by
+	// DeleteOrphanFeeds (which invalidates the cache).
+	cacheMu sync.RWMutex
+	userIDs map[string]int
+	feedIDs map[string]int
 }
 
 type Post struct {
@@ -239,7 +248,11 @@ func New(path string) *DB {
 	default:
 	}
 
-	return &DB{sql: db}
+	return &DB{
+		sql:     db,
+		userIDs: make(map[string]int),
+		feedIDs: make(map[string]int),
+	}
 }
 
 func (db *DB) Close() error {
@@ -342,18 +355,12 @@ func (db *DB) Subscribe(username string, feedURL string) {
 	fid := db.GetFeedID(feedURL)
 
 	// Default is_favorite to false when subscribing to a new feed
-	var id int
-	err := db.sql.QueryRow("SELECT id FROM subscribe WHERE user_id=? AND feed_id=?", uid, fid).Scan(&id)
-	if err == sql.ErrNoRows {
-		lock()
-		_, err := db.sql.Exec("INSERT INTO subscribe (user_id, feed_id, is_favorite) VALUES (?, ?, ?)", uid, fid, false)
-		unlock()
+	lock()
+	_, err := db.sql.Exec(`
+		INSERT INTO subscribe (user_id, feed_id, is_favorite) VALUES (?, ?, ?)
+		ON CONFLICT(user_id, feed_id) DO NOTHING`, uid, fid, false)
+	unlock()
 
-		if err != nil {
-			log.Fatal(err)
-		}
-		return
-	}
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -379,11 +386,10 @@ func (db *DB) GetFavoriteUnreadPosts(username string, limit int) ([]*UserPostEnt
 		FROM post p
 		JOIN feed f ON p.feed_id = f.id
 		JOIN subscribe s ON f.id = s.feed_id
-		JOIN user u ON s.user_id = u.id
-		LEFT JOIN post_read pr ON p.id = pr.post_id AND u.id = pr.user_id
-		WHERE u.id = ? AND s.is_favorite = 1 AND (pr.has_read IS NULL OR pr.has_read = 0)
+		LEFT JOIN post_read pr ON p.id = pr.post_id AND pr.user_id = ?
+		WHERE s.user_id = ? AND s.is_favorite = 1 AND (pr.has_read IS NULL OR pr.has_read = 0)
 		ORDER BY p.published_at ASC
-		LIMIT ?`, userId, limit)
+		LIMIT ?`, userId, userId, limit)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return []*UserPostEntry{}, nil
@@ -586,16 +592,17 @@ func (db *DB) DeleteOrphanFeeds() []string {
 	if err != nil {
 		return []string{}
 	}
-	defer rows.Close()
 
 	var orphanFeedUrls []string
 	for rows.Next() {
 		var url string
 		if err := rows.Scan(&url); err != nil {
+			rows.Close()
 			return orphanFeedUrls
 		}
 		orphanFeedUrls = append(orphanFeedUrls, url)
 	}
+	rows.Close()
 
 	// Delete posts that belong to the orphan feeds (feeds that are not
 	// subscribed to by any user)
@@ -614,22 +621,43 @@ func (db *DB) DeleteOrphanFeeds() []string {
 		log.Fatal(err)
 	}
 
+	// invalidate cached ids of feeds that no longer exist
+	db.cacheMu.Lock()
+	for _, url := range orphanFeedUrls {
+		delete(db.feedIDs, url)
+	}
+	db.cacheMu.Unlock()
+
 	return orphanFeedUrls
 }
 
 func (db *DB) GetUserID(username string) int {
-	var uid int
+	db.cacheMu.RLock()
+	uid, ok := db.userIDs[username]
+	db.cacheMu.RUnlock()
+	if ok {
+		return uid
+	}
 
 	err := db.sql.QueryRow("SELECT id FROM user WHERE username=?", username).Scan(&uid)
 
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	db.cacheMu.Lock()
+	db.userIDs[username] = uid
+	db.cacheMu.Unlock()
 	return uid
 }
 
 func (db *DB) GetFeedID(feedURL string) int {
-	var fid int
+	db.cacheMu.RLock()
+	fid, ok := db.feedIDs[feedURL]
+	db.cacheMu.RUnlock()
+	if ok {
+		return fid
+	}
 
 	err := db.sql.QueryRow("SELECT id FROM feed WHERE url=?", feedURL).Scan(&fid)
 
@@ -640,6 +668,10 @@ func (db *DB) GetFeedID(feedURL string) int {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	db.cacheMu.Lock()
+	db.feedIDs[feedURL] = fid
+	db.cacheMu.Unlock()
 	return fid
 }
 
@@ -684,6 +716,17 @@ func (db *DB) GetFeedFetchError(url string) (string, error) {
 	return "", nil
 }
 
+// UpdateFeedRefreshState records the outcome of a refresh attempt (timestamp
+// + fetch error) in a single write.
+func (db *DB) UpdateFeedRefreshState(feedURL string, fetchErr string, refreshedAt time.Time) {
+	lock()
+	_, err := db.sql.Exec("UPDATE feed SET last_refreshed=?, fetch_error=? WHERE url=?", refreshedAt.UTC(), fetchErr, feedURL)
+	unlock()
+	if err != nil {
+		log.Printf("UpdateFeedRefreshState:: Error updating refresh state for feed %s: %v", feedURL, err)
+	}
+}
+
 func (db *DB) SavePostStruct(feedUrl string, post *Post) {
 	db.SavePost(feedUrl, post.Title, post.URL, post.PublishedDatetime)
 }
@@ -703,22 +746,53 @@ func (db *DB) SavePost(feedUrl string, title string, url string, publishedDateti
 	}
 }
 
-func (db *DB) GetPostId(postUrl, username string) int {
-	var uid = db.GetUserID(username)
-	var pid int
-
-	// Try to get the post ID from the feeds the user is subscribed to
-	err := db.sql.QueryRow(`
-		SELECT p.id FROM post p
-		JOIN feed f ON p.feed_id = f.id
-		JOIN subscribe s ON f.id = s.feed_id
-		WHERE p.url = ? AND s.user_id = ?`, postUrl, uid).Scan(&pid)
-
-	if err == sql.ErrNoRows {
-		// If no such post is found, get the ID of the first post with the given URL from the database
-		err = db.sql.QueryRow("SELECT id FROM post WHERE url=?", postUrl).Scan(&pid)
+// SavePosts inserts multiple posts for the same feed in a single transaction,
+// which is dramatically faster than one transaction per post.
+func (db *DB) SavePosts(feedUrl string, posts []*Post) {
+	if len(posts) == 0 {
+		return
 	}
 
+	feedId := db.GetFeedID(feedUrl)
+	if feedId == 0 {
+		log.Printf("[err] SavePosts: unknown feed '%s', skipping %d posts\n", feedUrl, len(posts))
+		return
+	}
+
+	lock()
+	defer unlock()
+
+	tx, err := db.sql.Begin()
+	if err != nil {
+		log.Printf("[err] SavePosts: could not begin transaction: %v\n", err)
+		return
+	}
+
+	stmt, err := tx.Prepare("INSERT INTO post (feed_id, title, url, published_at) VALUES (?, ?, ?, ?) ON CONFLICT(feed_id, url) DO NOTHING")
+	if err != nil {
+		tx.Rollback()
+		log.Printf("[err] SavePosts: could not prepare statement: %v\n", err)
+		return
+	}
+	defer stmt.Close()
+
+	for _, p := range posts {
+		if _, err := stmt.Exec(feedId, p.Title, p.URL, p.PublishedDatetime); err != nil {
+			tx.Rollback()
+			log.Printf("[err] SavePosts: could not insert post '%s': %v\n", p.URL, err)
+			return
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		log.Printf("[err] SavePosts: could not commit transaction: %v\n", err)
+	}
+}
+
+func (db *DB) GetPostId(postUrl string) int {
+	var pid int
+
+	err := db.sql.QueryRow("SELECT id FROM post WHERE url=?", postUrl).Scan(&pid)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -726,53 +800,64 @@ func (db *DB) GetPostId(postUrl, username string) int {
 	return pid
 }
 
+// isSpammyPostURL reports whether a post URL matches one of the domains in
+// the spammy-feeds blocklist (equivalent to SQL `LIKE '%domain%'`).
+func isSpammyPostURL(postURL string) bool {
+	for _, domain := range listOfSpammyFeeds {
+		if strings.Contains(postURL, domain) {
+			return true
+		}
+	}
+	return false
+}
+
+// isAggregatorFeedURL reports whether a feed URL belongs to a known feed
+// aggregator domain.
+func isAggregatorFeedURL(feedURL string) bool {
+	for _, aggregator := range knownFeedAggregators {
+		if strings.Contains(feedURL, aggregator) {
+			return true
+		}
+	}
+	return false
+}
+
 func (db *DB) GetLatestPostsForDiscover(limit int) []*Post {
-	query := `
-        SELECT p.title, p.url, MAX(p.published_at) as published_at, f.url
+	// Oversample the most recent posts and filter out spammy domains in Go.
+	// Pushing ~140 `NOT LIKE '%…%'` conditions down to SQLite forced a scan of
+	// the whole posts×feeds join; this query is backed by the published_at
+	// index instead.
+	oversampledLimit := limit * 5
+
+	rows, err := db.sql.Query(`
+        SELECT p.title, p.url, p.published_at, f.url
         FROM post p
         JOIN feed f ON p.feed_id = f.id
-        WHERE `
-
-	// Add a 'NOT LIKE' clause for each item in the exclusion list
-	// Filter based on post URL for most domains, but allow feed aggregators
-	for i, domain := range listOfSpammyFeeds {
-		if i > 0 {
-			query += " AND "
-		}
-
-		query += fmt.Sprintf("p.url NOT LIKE '%%%s%%'", domain)
-	}
-
-	// filter out known feed aggregators
-	for _, aggregator := range knownFeedAggregators {
-		query += fmt.Sprintf(" AND f.url NOT LIKE '%%%s%%'", aggregator)
-	}
-
-	query += `
-        GROUP BY p.url
         ORDER BY p.published_at DESC
-        LIMIT ?`
-
-	rows, err := db.sql.Query(query, limit)
+        LIMIT ?`, oversampledLimit)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer rows.Close()
 
-	var posts []*Post
-	for rows.Next() {
+	posts := make([]*Post, 0, limit)
+	seen := make(map[string]struct{})
+	for rows.Next() && len(posts) < limit {
 		var p Post
-		var publishedTime string
-		err = rows.Scan(&p.Title, &p.URL, &publishedTime, &p.FeedURL)
+		err = rows.Scan(&p.Title, &p.URL, &p.PublishedDatetime, &p.FeedURL)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		p.PublishedDatetime, err = db.TryParseDate(publishedTime)
-		if err != nil {
-			log.Fatal(err)
+		// dedupe by post url (the same url may exist under multiple feeds)
+		if _, ok := seen[p.URL]; ok {
+			continue
+		}
+		if isSpammyPostURL(p.URL) || isAggregatorFeedURL(p.FeedURL) {
+			continue
 		}
 
+		seen[p.URL] = struct{}{}
 		posts = append(posts, &p)
 	}
 	return posts
@@ -858,11 +943,10 @@ func (db *DB) GetPostsForUser(username string, limit int) []*UserPostEntry {
         FROM post p
         JOIN feed f ON p.feed_id = f.id
         JOIN subscribe s ON f.id = s.feed_id
-        JOIN user u ON s.user_id = u.id
-        LEFT JOIN post_read pr ON p.id = pr.post_id AND u.id = pr.user_id
-        WHERE u.id = ?
+        LEFT JOIN post_read pr ON p.id = pr.post_id AND pr.user_id = ?
+        WHERE s.user_id = ?
         ORDER BY p.published_at DESC
-        LIMIT ?`, uid, limit)
+        LIMIT ?`, uid, uid, limit)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -890,86 +974,178 @@ func (db *DB) GetPostsForUser(username string, limit int) []*UserPostEntry {
 	return userPostsEntries
 }
 
-func (db *DB) GetRandomPost() *Post {
-	var p Post
+// SplitFeedData holds the per-feed data needed to render the split view:
+// total/unread post counts and the candidate posts to display.
+type SplitFeedData struct {
+	TotalPosts  int
+	UnreadCount int
+	Posts       []*UserPostEntry
+}
 
-	// Two-step random: pick a random feed first, then a random post from it.
-	// This gives every feed equal weight regardless of post count.
-	feedFilter := "WHERE 1=1"
-	for _, aggregator := range knownFeedAggregators {
-		feedFilter += fmt.Sprintf(" AND f.url NOT LIKE '%%%s%%'", aggregator)
-	}
+// GetPostsForSplitView returns, for every feed the user is subscribed to, the
+// per-feed total/unread counts plus up to perFeedLimit recent posts (and any
+// unread posts beyond that window, since the split view prefers showing
+// unread). It runs two queries total instead of one query per feed.
+func (db *DB) GetPostsForSplitView(username string, perFeedLimit int) map[string]*SplitFeedData {
+	uid := db.GetUserID(username)
+	result := make(map[string]*SplitFeedData)
 
-	postFilter := ""
-	for _, domain := range listOfSpammyFeeds {
-		postFilter += fmt.Sprintf(" AND p.url NOT LIKE '%%%s%%'", domain)
-	}
-
-	query := fmt.Sprintf(`
-        SELECT p.title, p.url, p.published_at
-        FROM post p
-        JOIN feed f ON p.feed_id = f.id
-        WHERE p.feed_id = (
-            SELECT f.id FROM feed f
-            %s
-            AND EXISTS (SELECT 1 FROM post WHERE feed_id = f.id)
-            ORDER BY RANDOM()
-            LIMIT 1
-        )%s
-        ORDER BY RANDOM()
-        LIMIT 1`, feedFilter, postFilter)
-
-	err := db.sql.QueryRow(query).Scan(&p.Title, &p.URL, &p.PublishedDatetime)
+	// per-feed total and unread counts
+	countRows, err := db.sql.Query(`
+		SELECT f.url, COUNT(*),
+			COALESCE(SUM(CASE WHEN pr.has_read IS NULL OR pr.has_read = 0 THEN 1 ELSE 0 END), 0)
+		FROM post p
+		JOIN feed f ON p.feed_id = f.id
+		JOIN subscribe s ON s.feed_id = p.feed_id AND s.user_id = ?
+		LEFT JOIN post_read pr ON pr.post_id = p.id AND pr.user_id = ?
+		GROUP BY p.feed_id`, uid, uid)
 	if err != nil {
 		log.Fatal(err)
 	}
+	for countRows.Next() {
+		var feedURL string
+		var data SplitFeedData
+		if err := countRows.Scan(&feedURL, &data.TotalPosts, &data.UnreadCount); err != nil {
+			log.Fatal(err)
+		}
+		result[feedURL] = &data
+	}
+	countRows.Close()
 
-	return &p
+	// Per-feed candidates: the perFeedLimit most recent posts (rn_all), plus
+	// up to perFeedLimit unread posts regardless of age (rn_state) — an old
+	// unread post may rank beyond the recent window but still needs to be
+	// displayable. Read posts needed to fill the window are always covered by
+	// rn_all: if a feed has u < perFeedLimit unread posts, the newest
+	// perFeedLimit-u read posts all rank within the first perFeedLimit rows.
+	rows, err := db.sql.Query(`
+		WITH ranked AS (
+			SELECT
+				f.url AS feed_url,
+				p.title, p.url, p.published_at, pr.has_read,
+				ROW_NUMBER() OVER (PARTITION BY p.feed_id ORDER BY p.published_at DESC) AS rn_all,
+				ROW_NUMBER() OVER (
+					PARTITION BY p.feed_id, CASE WHEN pr.has_read IS NULL OR pr.has_read = 0 THEN 0 ELSE 1 END
+					ORDER BY p.published_at DESC
+				) AS rn_state
+			FROM post p
+			JOIN feed f ON p.feed_id = f.id
+			JOIN subscribe s ON s.feed_id = p.feed_id AND s.user_id = ?
+			LEFT JOIN post_read pr ON pr.post_id = p.id AND pr.user_id = ?
+		)
+		SELECT feed_url, title, url, published_at, has_read
+		FROM ranked
+		WHERE rn_all <= ? OR (COALESCE(has_read, 0) = 0 AND rn_state <= ?)
+		ORDER BY feed_url, rn_all`, uid, uid, perFeedLimit, perFeedLimit)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var feedURL string
+		var p gofeed.Item
+		var hasRead sql.NullBool
+		if err := rows.Scan(&feedURL, &p.Title, &p.Link, &p.PublishedParsed, &hasRead); err != nil {
+			log.Fatal(err)
+		}
+
+		data, ok := result[feedURL]
+		if !ok {
+			continue
+		}
+		data.Posts = append(data.Posts, &UserPostEntry{
+			Post:    &p,
+			IsRead:  hasRead.Valid && hasRead.Bool,
+			FeedURL: feedURL,
+		})
+	}
+
+	return result
+}
+
+func (db *DB) GetRandomPost() *Post {
+	// Sample recent posts and pick one at random in Go, filtering out spammy
+	// domains as we go. This replaces running ORDER BY RANDOM() with ~140
+	// NOT LIKE filters over the whole post table. Two-step selection (random
+	// feed, then random post) keeps every sampled feed at equal weight
+	// regardless of post count.
+	rows, err := db.sql.Query(`
+        SELECT p.title, p.url, p.published_at, f.url
+        FROM post p
+        JOIN feed f ON p.feed_id = f.id
+        ORDER BY p.published_at DESC
+        LIMIT 500`)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+
+	postsByFeed := make(map[string][]*Post)
+	for rows.Next() {
+		var p Post
+		if err := rows.Scan(&p.Title, &p.URL, &p.PublishedDatetime, &p.FeedURL); err != nil {
+			log.Fatal(err)
+		}
+		if isSpammyPostURL(p.URL) || isAggregatorFeedURL(p.FeedURL) {
+			continue
+		}
+		postsByFeed[p.FeedURL] = append(postsByFeed[p.FeedURL], &p)
+	}
+
+	if len(postsByFeed) == 0 {
+		log.Fatal("GetRandomPost: no posts to pick from")
+	}
+
+	feeds := make([][]*Post, 0, len(postsByFeed))
+	for _, posts := range postsByFeed {
+		feeds = append(feeds, posts)
+	}
+	chosenFeed := feeds[rand.Intn(len(feeds))]
+	return chosenFeed[rand.Intn(len(chosenFeed))]
 }
 
 func (db *DB) SetReadStatus(username string, postUrl string, read bool) {
 	userId := db.GetUserID(username)
-	postId := db.GetPostId(postUrl, username)
+	postId := db.GetPostId(postUrl)
 
-	var exists bool
-	err := db.sql.QueryRow("SELECT 1 FROM post_read WHERE user_id=? AND post_id=?", userId, postId).Scan(&exists)
+	lock()
+	_, err := db.sql.Exec(`
+		INSERT INTO post_read (user_id, post_id, has_read) VALUES (?, ?, ?)
+		ON CONFLICT(user_id, post_id) DO UPDATE SET has_read=excluded.has_read`,
+		userId, postId, read)
+	unlock()
+
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func (db *DB) ToggleReadStatus(username string, postUrl string) {
+	userId := db.GetUserID(username)
+	postId := db.GetPostId(postUrl)
+
+	var read bool
+	err := db.sql.QueryRow("SELECT has_read FROM post_read WHERE user_id=? AND post_id=?", userId, postId).Scan(&read)
 	if err != nil && err != sql.ErrNoRows {
 		log.Fatal(err)
 	}
 
 	lock()
-	if exists {
-		_, err = db.sql.Exec("UPDATE post_read SET has_read=? WHERE user_id=? AND post_id=?", read, userId, postId)
-		if err != nil {
-			log.Fatal(err)
-		}
-	} else {
-		_, err = db.sql.Exec("INSERT INTO post_read(user_id, post_id, has_read) VALUES(?, ?, ?)", userId, postId, read)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
+	_, err = db.sql.Exec(`
+		INSERT INTO post_read (user_id, post_id, has_read) VALUES (?, ?, ?)
+		ON CONFLICT(user_id, post_id) DO UPDATE SET has_read=excluded.has_read`,
+		userId, postId, !read)
 	unlock()
-}
 
-func (db *DB) ToggleReadStatus(username string, postUrl string) {
-	userId := db.GetUserID(username)
-	postId := db.GetPostId(postUrl, username)
-
-	var read bool
-
-	err := db.sql.QueryRow("SELECT has_read FROM post_read WHERE user_id=? AND post_id=?", userId, postId).Scan(&read)
-
-	if err != nil && err != sql.ErrNoRows {
+	if err != nil {
 		log.Fatal(err)
 	}
-
-	db.SetReadStatus(username, postUrl, !read)
 }
 
 func (db *DB) GetReadStatus(username string, postUrl string) bool {
 	userId := db.GetUserID(username)
-	postId := db.GetPostId(postUrl, username)
+	postId := db.GetPostId(postUrl)
 
 	var read bool
 
@@ -1028,35 +1204,39 @@ func (db *DB) GetSingleUserPreference(userId int, preferenceName string) *string
 }
 
 func (db *DB) SaveSingleUserPreference(userId int, preferenceName, preferenceValue string) error {
-	// Check if the preference already exists
-	var exists bool
-	err := db.sql.QueryRow("SELECT EXISTS(SELECT 1 FROM user_preferences WHERE user_id = ? AND preference_name = ?)", userId, preferenceName).Scan(&exists)
+	lock()
+	_, err := db.sql.Exec(`
+		INSERT INTO user_preferences (user_id, preference_name, preference_value) VALUES (?, ?, ?)
+		ON CONFLICT(user_id, preference_name) DO UPDATE SET preference_value=excluded.preference_value`,
+		userId, preferenceName, preferenceValue)
+	unlock()
 	if err != nil {
-		log.Printf("SaveUserPreference:: Error checking if preference exists: %v", err)
-		return err
+		log.Printf("SaveUserPreference:: Error saving user preference: %v", err)
 	}
+	return err
+}
 
-	if exists {
-		// Update existing preference
-		lock()
-		_, err := db.sql.Exec("UPDATE user_preferences SET preference_value = ? WHERE user_id = ? AND preference_name = ?", preferenceValue, userId, preferenceName)
-		unlock()
-		if err != nil {
-			log.Printf("SaveUserPreference:: Error updating user preference: %v", err)
-			return err
-		}
-	} else {
-		// Insert new preference
-		lock()
-		_, err := db.sql.Exec("INSERT INTO user_preferences (user_id, preference_name, preference_value) VALUES (?, ?, ?)", userId, preferenceName, preferenceValue)
-		unlock()
-		if err != nil {
-			log.Printf("SaveUserPreference:: Error inserting user preference: %v", err)
-			return err
-		}
+// GetAllUserPreferences fetches all preferences for a user in a single query,
+// keyed by preference name.
+func (db *DB) GetAllUserPreferences(userId int) map[string]string {
+	prefs := make(map[string]string)
+
+	rows, err := db.sql.Query("SELECT preference_name, preference_value FROM user_preferences WHERE user_id = ?", userId)
+	if err != nil {
+		log.Printf("GetAllUserPreferences:: Query failed: %v", err)
+		return prefs
 	}
+	defer rows.Close()
 
-	return nil
+	for rows.Next() {
+		var name, value string
+		if err := rows.Scan(&name, &value); err != nil {
+			log.Printf("GetAllUserPreferences:: Scan failed: %v", err)
+			return prefs
+		}
+		prefs[name] = value
+	}
+	return prefs
 }
 
 func (db *DB) GetFeedLastRefreshTime(feedURL string) time.Time {

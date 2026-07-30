@@ -38,9 +38,10 @@ type Site struct {
 	db *sqlite.DB
 
 	// in-memory cache for /discover
-	discoverCache     []*sqlite.Post
-	discoverCacheTime time.Time
-	discoverCacheMu   sync.Mutex
+	discoverCache           []*sqlite.Post
+	discoverCacheTime       time.Time
+	discoverRefreshInFlight bool
+	discoverCacheMu         sync.Mutex
 }
 
 var templates *template.Template
@@ -48,7 +49,7 @@ var templates *template.Template
 // New returns a fully populated & ready for action Site
 func New() *Site {
 	title := "mire"
-	db := sqlite.New(title + ".db?_pragma=journal_mode(WAL)")
+	db := sqlite.New(title + ".db?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=synchronous(NORMAL)&_pragma=cache_size(-20000)")
 
 	s := Site{
 		title:  title,
@@ -97,9 +98,27 @@ const discoverCacheTTL = 4 * time.Hour
 
 func (s *Site) discoverHandler(w http.ResponseWriter, r *http.Request) {
 	s.discoverCacheMu.Lock()
-	if s.discoverCache == nil || time.Since(s.discoverCacheTime) > discoverCacheTTL {
+	if s.discoverCache == nil {
+		// first request: populate the cache synchronously
 		s.discoverCache = s.db.GetLatestPostsForDiscover(100)
 		s.discoverCacheTime = time.Now()
+	} else if time.Since(s.discoverCacheTime) > discoverCacheTTL && !s.discoverRefreshInFlight {
+		// stale-while-revalidate: serve the stale cache now and refresh it in
+		// the background so requests never block on the refresh
+		s.discoverRefreshInFlight = true
+		go func() {
+			defer func() {
+				s.discoverCacheMu.Lock()
+				s.discoverRefreshInFlight = false
+				s.discoverCacheMu.Unlock()
+			}()
+
+			posts := s.db.GetLatestPostsForDiscover(100)
+			s.discoverCacheMu.Lock()
+			s.discoverCache = posts
+			s.discoverCacheTime = time.Now()
+			s.discoverCacheMu.Unlock()
+		}()
 	}
 	items := s.discoverCache
 	s.discoverCacheMu.Unlock()
@@ -401,10 +420,16 @@ func (s *Site) settingsSubscribeHandler(w http.ResponseWriter, r *http.Request) 
 			// update fetch time in DB
 			s.db.UpdateFeedLastRefreshTime(newFeed.FeedLink, time.Now())
 
-			// save feed posts to db
+			// save feed posts to db (batched into a single transaction)
+			posts := make([]*sqlite.Post, 0, len(newFeed.Items))
 			for _, post := range newFeed.Items {
-				s.db.SavePost(u, post.Title, post.Link, *post.PublishedParsed)
+				posts = append(posts, &sqlite.Post{
+					Title:             post.Title,
+					URL:               post.Link,
+					PublishedDatetime: *post.PublishedParsed,
+				})
 			}
+			s.db.SavePosts(u, posts)
 
 			log.Printf("reaper: registered new feed '%s' with '%d' posts\n", u, len(newFeed.Items))
 		}(u)
@@ -651,6 +676,9 @@ func (s *Site) splitFeedHandler(w http.ResponseWriter, r *http.Request) {
 	// Get user preferences
 	userPreferences := user_preferences.GetUserPreferences(s.db, s.db.GetUserID(username))
 
+	const perFeedLimit = 12
+	splitData := s.db.GetPostsForSplitView(username, perFeedLimit)
+
 	type perFeed struct {
 		URL         string
 		Title       string
@@ -664,46 +692,44 @@ func (s *Site) splitFeedHandler(w http.ResponseWriter, r *http.Request) {
 	totalPosts := 0
 
 	for _, feedURL := range feedURLs {
-		allPosts := s.db.GetPostsForFeedWithReadStatus(feedURL, username) // DESC by published_at
-		totalPosts += len(allPosts)
+		feedData := splitData[feedURL]
 
-		unread := make([]*sqlite.UserPostEntry, 0, 12)
-		read := make([]*sqlite.UserPostEntry, 0, 12)
-
-		for _, p := range allPosts {
-			if !p.IsRead {
-				unread = append(unread, p)
-			} else {
-				read = append(read, p)
-			}
+		var allPosts []*sqlite.UserPostEntry
+		unreadCount := 0
+		if feedData != nil {
+			allPosts = feedData.Posts
+			unreadCount = feedData.UnreadCount
+			totalPosts += feedData.TotalPosts
 		}
-
-		unreadCount := len(unread)
 		totalUnread += unreadCount
 
-		display := make([]*sqlite.UserPostEntry, 0, 12)
+		// allPosts is ordered by published_at DESC (with any older unread
+		// posts appended after the recent window)
+		display := make([]*sqlite.UserPostEntry, 0, perFeedLimit)
 		if userPreferences.SplitViewShowLatestPosts {
-			// Latest posts, whether read or not (allPosts is DESC by published_at)
+			// Latest posts, whether read or not
 			for i, p := range allPosts {
-				if i >= 12 {
+				if i >= perFeedLimit {
 					break
 				}
 				display = append(display, p)
 			}
 		} else {
 			// Take unread first
-			for _, p := range unread {
-				if len(display) >= 12 {
+			for _, p := range allPosts {
+				if len(display) >= perFeedLimit {
 					break
 				}
-				display = append(display, p)
+				if !p.IsRead {
+					display = append(display, p)
+				}
 			}
-			// Fill with newest read until 12
-			if len(display) < 12 {
-				for _, p := range read {
-					if len(display) >= 12 {
-						break
-					}
+			// Fill with newest read until the limit
+			for _, p := range allPosts {
+				if len(display) >= perFeedLimit {
+					break
+				}
+				if p.IsRead {
 					display = append(display, p)
 				}
 			}
@@ -872,6 +898,8 @@ func (s *Site) apiSetPostReadStatus(w http.ResponseWriter, r *http.Request) {
 // template execution engine. it's normally the last thing a
 // handler should do tbh.
 func (s *Site) renderPage(w http.ResponseWriter, r *http.Request, page string, data any) {
+	username := s.username(r)
+
 	// fields on this anon struct are generally
 	// pulled out of Data when they're globally required
 	// callers should jam anything they want into Data
@@ -883,8 +911,8 @@ func (s *Site) renderPage(w http.ResponseWriter, r *http.Request, page string, d
 		Data       any
 	}{
 		Title:      page + " | " + s.title,
-		Username:   s.username(r),
-		LoggedIn:   s.loggedIn(r),
+		Username:   username,
+		LoggedIn:   username != "",
 		CutePhrase: s.randomCutePhrase(),
 		Data:       data,
 	}
@@ -915,6 +943,8 @@ func (s *Site) renderPage(w http.ResponseWriter, r *http.Request, page string, d
 
 // renderPageWithTitle is like renderPage but allows explicit title override.
 func (s *Site) renderPageWithTitle(w http.ResponseWriter, r *http.Request, templateName string, title string, data any) {
+	username := s.username(r)
+
 	pageData := struct {
 		Title      string
 		Username   string
@@ -923,8 +953,8 @@ func (s *Site) renderPageWithTitle(w http.ResponseWriter, r *http.Request, templ
 		Data       any
 	}{
 		Title:      title,
-		Username:   s.username(r),
-		LoggedIn:   s.loggedIn(r),
+		Username:   username,
+		LoggedIn:   username != "",
 		CutePhrase: s.randomCutePhrase(),
 		Data:       data,
 	}

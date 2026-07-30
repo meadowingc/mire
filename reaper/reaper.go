@@ -105,13 +105,48 @@ func (r *Reaper) start() {
 	}
 }
 
+// startDbSaver accumulates incoming posts and writes them to the database in
+// batches (one transaction per flush) since a transaction per post is far
+// more expensive. Posts are batched per feed, so the buffer is flushed
+// whenever the feed changes, the buffer fills up, or the flush interval
+// elapses.
 func (r *Reaper) startDbSaver() {
+	const (
+		flushInterval = 5 * time.Second
+		flushSize     = 100
+	)
+
+	buffer := make([]*PostSaveRequest, 0, flushSize)
+
+	flush := func() {
+		if len(buffer) == 0 {
+			return
+		}
+		posts := make([]*sqlite.Post, len(buffer))
+		for i, req := range buffer {
+			posts[i] = &sqlite.Post{
+				Title:             req.Title,
+				URL:               req.Link,
+				PublishedDatetime: req.Date,
+			}
+		}
+		r.db.SavePosts(buffer[0].FeedLink, posts)
+		buffer = buffer[:0]
+	}
+
+	ticker := time.NewTicker(flushInterval)
 	for {
 		select {
 		case item := <-r.saverChannel:
-			r.db.SavePost(item.FeedLink, item.Title, item.Link, item.Date)
-		default:
-			time.Sleep(10 * time.Second)
+			if len(buffer) > 0 && buffer[0].FeedLink != item.FeedLink {
+				flush()
+			}
+			buffer = append(buffer, item)
+			if len(buffer) >= flushSize {
+				flush()
+			}
+		case <-ticker.C:
+			flush()
 		}
 	}
 }
@@ -185,7 +220,6 @@ func (r *Reaper) updateFeedAndSaveNewItemsToDb(fh *FeedHolder) {
 	lock()
 	r.feeds[f.FeedLink].LastFetched = fetchTime
 	unlock()
-	r.db.UpdateFeedLastRefreshTime(f.FeedLink, fetchTime)
 
 	originalItemsMap := make(map[string]*gofeed.Item)
 	for _, item := range f.Items {
@@ -201,11 +235,8 @@ func (r *Reaper) updateFeedAndSaveNewItemsToDb(fh *FeedHolder) {
 
 	newF.FeedLink = f.FeedLink // sometimes this gets overwritten for some reason
 
-	// otherwise tell the DB that we successfully fetched the feed
-	err = r.db.SetFeedFetchError(f.FeedLink, "")
-	if err != nil {
-		log.Printf("[err] reaper: could not clear feed fetch error '%s'\n", err)
-	}
+	// record the successful refresh (timestamp + cleared error) in one write
+	r.db.UpdateFeedRefreshState(f.FeedLink, "", fetchTime)
 
 	r.sanitizeFeedItems(newF)
 
@@ -301,10 +332,7 @@ func (r *Reaper) handleFeedFetchFailure(url string, err error) {
 	}
 
 	log.Printf("[warning] reaper: fetch failure '%s': %s%s\n", url, err, callerInfo)
-	err = r.db.SetFeedFetchError(url, err.Error())
-	if err != nil {
-		log.Printf("[err] reaper: could not set feed fetch error '%s'%s\n", err, callerInfo)
-	}
+	r.db.UpdateFeedRefreshState(url, err.Error(), time.Now())
 }
 
 // HasFeed checks whether a given url is represented
