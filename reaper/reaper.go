@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -28,8 +27,24 @@ type PostSaveRequest struct {
 }
 
 type FeedHolder struct {
+	// Feed holds feed metadata only (title, link, description, dates).
+	// Items are never retained here — the database is the source of truth
+	// for posts, and keeping every parsed item in RAM duplicated it.
 	Feed        *gofeed.Feed
 	LastFetched time.Time
+}
+
+// slimFeed strips a parsed feed down to the metadata the site actually
+// reads (templates use Title, Link and Description), dropping all items.
+func slimFeed(f *gofeed.Feed) *gofeed.Feed {
+	return &gofeed.Feed{
+		Title:           f.Title,
+		Link:            f.Link,
+		FeedLink:        f.FeedLink,
+		Description:     f.Description,
+		Published:       f.Published,
+		PublishedParsed: f.PublishedParsed,
+	}
 }
 
 type Reaper struct {
@@ -130,7 +145,9 @@ func (r *Reaper) startDbSaver() {
 				PublishedDatetime: req.Date,
 			}
 		}
-		r.db.SavePosts(buffer[0].FeedLink, posts)
+		if inserted := r.db.SavePosts(buffer[0].FeedLink, posts); inserted > 0 {
+			log.Printf("reaper: saved %d new posts for feed %s\n", inserted, buffer[0].FeedLink)
+		}
 		buffer = buffer[:0]
 	}
 
@@ -208,7 +225,6 @@ func (r *Reaper) sanitizeFeedItems(feed *gofeed.Feed) {
 func (r *Reaper) updateFeedAndSaveNewItemsToDb(fh *FeedHolder) {
 	f := fh.Feed
 
-	// TODO don't read from reaper, read from db
 	if _, ok := r.feeds[f.FeedLink]; !ok {
 		log.Printf("[err] reaper:updateFeedAndSaveNewItemsToDb → Tied to fetch a feed that is not known to Reaper")
 		return
@@ -220,11 +236,6 @@ func (r *Reaper) updateFeedAndSaveNewItemsToDb(fh *FeedHolder) {
 	lock()
 	r.feeds[f.FeedLink].LastFetched = fetchTime
 	unlock()
-
-	originalItemsMap := make(map[string]*gofeed.Item)
-	for _, item := range f.Items {
-		originalItemsMap[item.Link] = item
-	}
 
 	newF, err := r.rawFetchFeed(f.FeedLink)
 
@@ -257,31 +268,27 @@ func (r *Reaper) updateFeedAndSaveNewItemsToDb(fh *FeedHolder) {
 		r.AddFeedStub(newF.FeedLink)
 	}
 
+	// keep only the metadata in memory; items live in the database
 	lock()
-	r.feeds[newF.FeedLink].Feed = newF
+	r.feeds[newF.FeedLink].Feed = slimFeed(newF)
 	unlock()
 
-	newItems := []*gofeed.Item{}
-	for _, item := range newF.Items {
-		if _, exists := originalItemsMap[item.Link]; !exists {
-			newItems = append(newItems, item)
-		}
-	}
-
-	if len(newItems) > 0 {
-		log.Printf("Saving %d new items for feed %s\n", len(newItems), newF.FeedLink)
-
-		for _, newItem := range newItems {
-			r.saverChannel <- &PostSaveRequest{
-				FeedLink: newF.FeedLink,
-				Title:    newItem.Title,
-				Link:     newItem.Link,
-				Date:     *newItem.PublishedParsed,
-			}
-		}
-	}
+	// queue every item for saving; SavePosts skips the ones already in the
+	// database, so there's no need to diff against previously seen items here
+	r.queueFeedItemsForSaving(newF.FeedLink, newF.Items)
 
 	fh.LastFetched = time.Now()
+}
+
+func (r *Reaper) queueFeedItemsForSaving(feedLink string, items []*gofeed.Item) {
+	for _, item := range items {
+		r.saverChannel <- &PostSaveRequest{
+			FeedLink: feedLink,
+			Title:    item.Title,
+			Link:     item.Link,
+			Date:     *item.PublishedParsed,
+		}
+	}
 }
 
 // UpdateAll fetches every feed & attempts updating them
@@ -344,42 +351,13 @@ func (r *Reaper) HasFeed(url string) bool {
 	return false
 }
 
+// GetFeed returns the metadata (never the items) of a tracked feed,
+// or nil if the feed is unknown to the reaper.
 func (r *Reaper) GetFeed(url string) *gofeed.Feed {
 	if feedHolder, ok := r.feeds[url]; ok {
 		return feedHolder.Feed
 	}
 	return nil
-}
-
-func (r *Reaper) GetAllFeeds() []*gofeed.Feed {
-	var result []*gofeed.Feed
-	for _, f := range r.feeds {
-		result = append(result, f.Feed)
-	}
-
-	return result
-}
-
-func (r *Reaper) SortFeeds(f []*gofeed.Feed) {
-	sort.Slice(f, func(i, j int) bool {
-		return f[i].FeedLink < f[j].FeedLink
-	})
-}
-
-func (r *Reaper) SortFeedItemsByDate(feeds []*gofeed.Feed) []*gofeed.Item {
-	var posts []*gofeed.Item
-	for _, f := range feeds {
-		posts = append(posts, f.Items...)
-	}
-
-	return r.SortItemsByDate(posts)
-}
-
-func (r *Reaper) SortItemsByDate(posts []*gofeed.Item) []*gofeed.Item {
-	sort.Slice(posts, func(i, j int) bool {
-		return posts[i].PublishedParsed.After(*posts[j].PublishedParsed)
-	})
-	return posts
 }
 
 func (r *Reaper) AddFeedStub(url string) {
@@ -418,12 +396,14 @@ func (r *Reaper) rawFetchFeed(url string) (*gofeed.Feed, error) {
 	return fp.ParseURL(url)
 }
 
-// Fetch attempts to fetch a feed from a given url, marshal
-// it into a feed object, and manage it via reaper.
-func (r *Reaper) Fetch(url string) error {
+// Fetch fetches a feed from a given url, tracks its metadata in the reaper,
+// and queues its items for saving to the database. The fully parsed feed
+// (including items) is returned for immediate use — the reaper itself never
+// retains the items in memory.
+func (r *Reaper) Fetch(url string) (*gofeed.Feed, error) {
 	feed, err := r.rawFetchFeed(url)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	feed.FeedLink = url // sometimes this gets overwritten for some reason
@@ -432,10 +412,12 @@ func (r *Reaper) Fetch(url string) error {
 
 	lock()
 	r.feeds[url] = &FeedHolder{
-		Feed:        feed,
+		Feed:        slimFeed(feed),
 		LastFetched: time.Now(),
 	}
 	unlock()
 
-	return nil
+	r.queueFeedItemsForSaving(url, feed.Items)
+
+	return feed, nil
 }

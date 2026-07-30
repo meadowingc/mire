@@ -748,15 +748,17 @@ func (db *DB) SavePost(feedUrl string, title string, url string, publishedDateti
 
 // SavePosts inserts multiple posts for the same feed in a single transaction,
 // which is dramatically faster than one transaction per post.
-func (db *DB) SavePosts(feedUrl string, posts []*Post) {
+// SavePosts inserts posts in a single transaction, skipping any whose
+// (feed_id, url) already exists. Returns how many were actually new.
+func (db *DB) SavePosts(feedUrl string, posts []*Post) int {
 	if len(posts) == 0 {
-		return
+		return 0
 	}
 
 	feedId := db.GetFeedID(feedUrl)
 	if feedId == 0 {
 		log.Printf("[err] SavePosts: unknown feed '%s', skipping %d posts\n", feedUrl, len(posts))
-		return
+		return 0
 	}
 
 	lock()
@@ -765,28 +767,35 @@ func (db *DB) SavePosts(feedUrl string, posts []*Post) {
 	tx, err := db.sql.Begin()
 	if err != nil {
 		log.Printf("[err] SavePosts: could not begin transaction: %v\n", err)
-		return
+		return 0
 	}
 
 	stmt, err := tx.Prepare("INSERT INTO post (feed_id, title, url, published_at) VALUES (?, ?, ?, ?) ON CONFLICT(feed_id, url) DO NOTHING")
 	if err != nil {
 		tx.Rollback()
 		log.Printf("[err] SavePosts: could not prepare statement: %v\n", err)
-		return
+		return 0
 	}
 	defer stmt.Close()
 
+	inserted := 0
 	for _, p := range posts {
-		if _, err := stmt.Exec(feedId, p.Title, p.URL, p.PublishedDatetime); err != nil {
+		res, err := stmt.Exec(feedId, p.Title, p.URL, p.PublishedDatetime)
+		if err != nil {
 			tx.Rollback()
 			log.Printf("[err] SavePosts: could not insert post '%s': %v\n", p.URL, err)
-			return
+			return 0
+		}
+		if n, err := res.RowsAffected(); err == nil {
+			inserted += int(n)
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
 		log.Printf("[err] SavePosts: could not commit transaction: %v\n", err)
+		return 0
 	}
+	return inserted
 }
 
 func (db *DB) GetPostId(postUrl string) int {

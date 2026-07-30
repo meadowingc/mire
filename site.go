@@ -408,14 +408,12 @@ func (s *Site) settingsSubscribeHandler(w http.ResponseWriter, r *http.Request) 
 			s.reaper.AddFeedStub(u)
 
 			// try to get posts and save them
-			err := s.reaper.Fetch(u)
+			newFeed, err := s.reaper.Fetch(u)
 			if err != nil {
 				fmt.Printf("reaper: can't fetch '%s' %s\n", u, err)
 				s.db.SetFeedFetchError(u, err.Error())
 				return
 			}
-
-			newFeed := s.reaper.GetFeed(u)
 
 			// update fetch time in DB
 			s.db.UpdateFeedLastRefreshTime(newFeed.FeedLink, time.Now())
@@ -609,7 +607,7 @@ func (s *Site) feedDetailsHandler(w http.ResponseWriter, r *http.Request) {
 		if !s.reaper.HasFeed(decodedURL) {
 			// Add the feed to reaper and try to fetch it
 			s.reaper.AddFeedStub(decodedURL)
-			err := s.reaper.Fetch(decodedURL)
+			fetchedFeed, err := s.reaper.Fetch(decodedURL)
 			if err != nil {
 				// If we can't fetch it, create a minimal feed object
 				feed = &gofeed.Feed{
@@ -618,7 +616,7 @@ func (s *Site) feedDetailsHandler(w http.ResponseWriter, r *http.Request) {
 					Link:     decodedURL,
 				}
 			} else {
-				feed = s.reaper.GetFeed(decodedURL)
+				feed = fetchedFeed
 			}
 		} else {
 			// Feed exists in reaper but GetFeed returned nil - this shouldn't happen
@@ -1164,8 +1162,7 @@ func (s *Site) apiToggleSubscriptionHandler(w http.ResponseWriter, r *http.Reque
 			s.reaper.AddFeedStub(feedUrl)
 			// Try to fetch the feed in the background
 			go func() {
-				err := s.reaper.Fetch(feedUrl)
-				if err != nil {
+				if _, err := s.reaper.Fetch(feedUrl); err != nil {
 					log.Printf("Failed to fetch feed %s: %v", feedUrl, err)
 					s.db.SetFeedFetchError(feedUrl, err.Error())
 				}
