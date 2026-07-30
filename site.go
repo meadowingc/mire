@@ -682,20 +682,30 @@ func (s *Site) splitFeedHandler(w http.ResponseWriter, r *http.Request) {
 		totalUnread += unreadCount
 
 		display := make([]*sqlite.UserPostEntry, 0, 12)
-		// Take unread first
-		for _, p := range unread {
-			if len(display) >= 12 {
-				break
+		if userPreferences.SplitViewShowLatestPosts {
+			// Latest posts, whether read or not (allPosts is DESC by published_at)
+			for i, p := range allPosts {
+				if i >= 12 {
+					break
+				}
+				display = append(display, p)
 			}
-			display = append(display, p)
-		}
-		// Fill with newest read until 12
-		if len(display) < 12 {
-			for _, p := range read {
+		} else {
+			// Take unread first
+			for _, p := range unread {
 				if len(display) >= 12 {
 					break
 				}
 				display = append(display, p)
+			}
+			// Fill with newest read until 12
+			if len(display) < 12 {
+				for _, p := range read {
+					if len(display) >= 12 {
+						break
+					}
+					display = append(display, p)
+				}
 			}
 		}
 

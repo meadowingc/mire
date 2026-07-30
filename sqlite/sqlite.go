@@ -47,10 +47,12 @@ var listOfSpammyFeeds = []string{
 	"aftermath.site",
 	"anchor.fm",
 	"appaddict.app",
+	"arktosjournal.com",
 	"arstechnica.com",
 	"astralcodexten.com",
 	"babylonbee.com",
 	"basementcommunity.com",
+	"beautybay.com",
 	"biccy.it",
 	"birchtree.me",
 	"blog.flickr.net",
@@ -65,6 +67,7 @@ var listOfSpammyFeeds = []string{
 	"daringfireball.net",
 	"datenschutzverein.de",
 	"defector.com",
+	"digitalcourage.de",
 	"digitalrechte.de",
 	"f-droid.org",
 	"facebook.com",
@@ -116,6 +119,7 @@ var listOfSpammyFeeds = []string{
 	"ohohdeco.com",
 	"omny.fm",
 	"omnycontent.com",
+	"on.substack.com",
 	"ootdfinds.com",
 	"openmentions.com",
 	"pewresearch.org",
@@ -228,8 +232,12 @@ func New(path string) *DB {
 		}
 	}
 
-	// open up mutex
-	mutex <- struct{}{}
+	// open up mutex (non-blocking: the token is already there if this is
+	// not the first DB opened in this process)
+	select {
+	case mutex <- struct{}{}:
+	default:
+	}
 
 	return &DB{sql: db}
 }

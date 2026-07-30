@@ -45,7 +45,12 @@ type Reaper struct {
 var mutex = make(chan struct{}, 1)
 
 func New(db *sqlite.DB) *Reaper {
-	mutex <- struct{}{}
+	// open up mutex (non-blocking: the token is already there if this is
+	// not the first reaper started in this process)
+	select {
+	case mutex <- struct{}{}:
+	default:
+	}
 
 	r := &Reaper{
 		feeds:        make(map[string]*FeedHolder),
@@ -82,7 +87,10 @@ func (r *Reaper) start() {
 			}
 
 			// trigged immediate refresh by setting LastFetched to a time in the past
-			lastRefreshed := time.Now().Add(-timeToBecomeStale)
+			// (one second past the staleness boundary so the strict Before
+			// comparison still holds when time.Now() has coarse granularity,
+			// e.g. on Windows where two calls can return the same instant)
+			lastRefreshed := time.Now().Add(-timeToBecomeStale - time.Second)
 			r.feeds[url] = &FeedHolder{
 				Feed:        feed,
 				LastFetched: lastRefreshed,

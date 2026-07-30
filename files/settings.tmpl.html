@@ -61,6 +61,12 @@
       <input type="checkbox" name="openLinksInNewTab" id="openLinksInNewTab" {{ if $up.OpenLinksInNewTab }}checked{{ end }}>
     </div>
     <br />
+
+    <div>
+      <label for="splitViewShowLatestPosts">In split view, show the latest posts whether read or not (instead of unread first):</label>
+      <input type="checkbox" name="splitViewShowLatestPosts" id="splitViewShowLatestPosts" {{ if $up.SplitViewShowLatestPosts }}checked{{ end }}>
+    </div>
+    <br />
     
     <input type="submit" value="Save Preferences">
   </form>

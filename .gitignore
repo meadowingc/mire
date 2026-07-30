@@ -2,6 +2,7 @@ mire
 vore
 vore.db
 tmp
+/.github/
 
 *.db
 mire.db-*
