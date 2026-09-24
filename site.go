@@ -57,6 +57,12 @@ func New() *Site {
 		db:     db,
 	}
 
+	s.loadTemplates()
+
+	return &s
+}
+
+func (s *Site) loadTemplates() {
 	funcMap := template.FuncMap{
 		"printDomain": s.printDomain,
 		"timeSince":   s.timeSince,
@@ -69,8 +75,6 @@ func New() *Site {
 
 	tmplFiles := filepath.Join("files", "*.tmpl.html")
 	templates = template.Must(template.New("whatever").Funcs(funcMap).ParseGlob(tmplFiles))
-
-	return &s
 }
 
 func (s *Site) staticHandler(w http.ResponseWriter, r *http.Request) {
@@ -411,9 +415,6 @@ func (s *Site) settingsSubscribeHandler(w http.ResponseWriter, r *http.Request) 
 				s.db.SetFeedFetchError(u, err.Error())
 				return
 			}
-
-			// update fetch time in DB
-			s.db.UpdateFeedLastRefreshTime(newFeed.FeedLink, time.Now())
 
 			// save feed posts to db (batched into a single transaction)
 			posts := make([]*sqlite.Post, 0, len(newFeed.Items))

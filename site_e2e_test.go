@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -27,6 +28,7 @@ func newTestServer(t *testing.T) (*httptest.Server, *sqlite.DB) {
 		reaper: reaper.New(db),
 		db:     db,
 	}
+	s.loadTemplates()
 
 	var router *chi.Mux = buildRouter(s)
 	server := httptest.NewServer(router)
@@ -87,6 +89,75 @@ func seedFeedWithPosts(t *testing.T, db *sqlite.DB, username, feedURL string, po
 	db.WriteFeed(feedURL)
 	db.SavePosts(feedURL, posts)
 	db.Subscribe(username, feedURL)
+}
+
+func TestE2EFeedDescriptionEscapesLiteralMarkup(t *testing.T) {
+	server, db := newTestServer(t)
+	feedURL := "https://example.com/feed"
+	db.WriteFeed(feedURL)
+	db.UpdateFeedMetadata(feedURL, "Example", "Links & things <!-- literal -->", "https://example.com")
+
+	resp := get(t, server, "/feeds/"+url.QueryEscape(feedURL), nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("feed details status: %d", resp.Code)
+	}
+	if !strings.Contains(resp.Body.String(), "Links &amp; things &lt;!-- literal --&gt;") {
+		t.Fatal("feed description was not safely escaped")
+	}
+}
+
+func TestE2ESubscriptionRespectsFreshnessAndAtomSubtitle(t *testing.T) {
+	var fetches atomic.Int32
+	feedServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fetches.Add(1)
+		w.Header().Set("Content-Type", "application/atom+xml")
+		w.Header().Set("Cache-Control", "max-age=86400")
+		w.Header().Set("Expires", time.Now().Add(24*time.Hour).UTC().Format(http.TimeFormat))
+		w.Write([]byte(`<?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Example links</title><id>https://example.com/feed</id><updated>2026-09-24T00:00:00Z</updated>
+  <subtitle>Useful <!-- -->links &amp; notes</subtitle>
+</feed>`))
+	}))
+	defer feedServer.Close()
+
+	server, db := newTestServer(t)
+	cookie := sessionCookie(t, server, "feedreader")
+	encodedURL := url.QueryEscape(feedServer.URL)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/toggle-subscription/"+encodedURL,
+		strings.NewReader("subscribe=true"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(cookie)
+	recorder := httptest.NewRecorder()
+	server.Config.Handler.ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("subscription status: %d", recorder.Code)
+	}
+
+	var deadline time.Time
+	until := time.Now().Add(5 * time.Second)
+	for time.Now().Before(until) {
+		deadline = db.GetFeedPollDeadlines()[feedServer.URL]
+		if db.GetFeedMetadata(feedServer.URL).Description == "Useful links & notes" &&
+			deadline.After(time.Now().Add(23*time.Hour)) {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if deadline.Before(time.Now().Add(23*time.Hour)) || deadline.After(time.Now().Add(25*time.Hour)) {
+		t.Fatalf("expected persisted 24-hour deadline, got %s", deadline)
+	}
+
+	resp := get(t, server, "/feeds/"+encodedURL, cookie)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("feed details status: %d", resp.Code)
+	}
+	if !strings.Contains(resp.Body.String(), "<p>Useful links &amp; notes</p>") {
+		t.Fatal("feed page does not display decoded Atom subtitle")
+	}
+	if got := fetches.Load(); got != 1 {
+		t.Fatalf("page caused an extra feed fetch: %d", got)
+	}
 }
 
 func TestE2ERegisterLoginAndHomePage(t *testing.T) {

@@ -478,6 +478,30 @@ func (db *DB) GetAllFeedURLs() []string {
 	return urls
 }
 
+// GetFeedPollDeadlines returns all tracked feeds and their next eligible fetch.
+// A NULL deadline means the feed has never been scheduled and can be fetched now.
+func (db *DB) GetFeedPollDeadlines() map[string]time.Time {
+	rows, err := db.sql.Query("SELECT url, next_fetch_at FROM feed")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+
+	deadlines := make(map[string]time.Time)
+	for rows.Next() {
+		var url string
+		var next sql.NullTime
+		if err := rows.Scan(&url, &next); err != nil {
+			log.Fatal(err)
+		}
+		deadlines[url] = next.Time
+	}
+	if err := rows.Err(); err != nil {
+		log.Fatal(err)
+	}
+	return deadlines
+}
+
 func (db *DB) GetNumSubscribersForFeed(feedUrl string) int {
 	var count int
 	query := `
@@ -809,11 +833,11 @@ func (db *DB) GetFeedFetchError(url string) (string, error) {
 	return "", nil
 }
 
-// UpdateFeedRefreshState records the outcome of a refresh attempt (timestamp
-// + fetch error) in a single write.
-func (db *DB) UpdateFeedRefreshState(feedURL string, fetchErr string, refreshedAt time.Time) {
+// UpdateFeedRefreshState records the outcome and next eligible fetch together.
+func (db *DB) UpdateFeedRefreshState(feedURL string, fetchErr string, refreshedAt, nextFetchAt time.Time) {
 	lock()
-	_, err := db.sql.Exec("UPDATE feed SET last_refreshed=?, fetch_error=? WHERE url=?", refreshedAt.UTC(), fetchErr, feedURL)
+	_, err := db.sql.Exec("UPDATE feed SET last_refreshed=?, fetch_error=?, next_fetch_at=? WHERE url=?",
+		refreshedAt.UTC(), fetchErr, nextFetchAt.UTC(), feedURL)
 	unlock()
 	if err != nil {
 		log.Printf("UpdateFeedRefreshState:: Error updating refresh state for feed %s: %v", feedURL, err)
