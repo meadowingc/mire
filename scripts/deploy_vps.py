@@ -228,6 +228,13 @@ def backup_configuration(config_text, unit_text):
     selected[0]["path"] = "/var/lib/mire/mire.db"
     require(config_text.count('"/root/mire/mire.db"') == 1, "Ambiguous Backuper source")
     updated = config_text.replace('"/root/mire/mire.db"', '"/var/lib/mire/mire.db"', 1)
+    require(not any(entry.get("label") == "mire-configuration"
+                    or entry["path"] == "/etc/mire/mire.env" for entry in expected.get("files", [])),
+            "Backuper already has a Mire configuration source; review coverage before migration")
+    expected.setdefault("files", []).append({
+        "path": "/etc/mire/mire.env", "label": "mire-configuration",
+    })
+    updated += '\n[[files]]\npath = "/etc/mire/mire.env"\nlabel = "mire-configuration"\n'
     require(tomllib.loads(updated) == expected, "Unexpected Backuper configuration change")
     lines = re.findall(r"(?m)^ReadWritePaths=(.*)$", unit_text)
     require(len(lines) == 1 and shlex.split(lines[0]).count("/root/mire") == 1,

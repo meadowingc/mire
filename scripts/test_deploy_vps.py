@@ -121,7 +121,8 @@ BACKUP_UNIT = '[Service]\nReadWritePaths="/root/mire" "/var/lib/backuper" "/var/
 class BackupCoverageTests(unittest.TestCase):
     def test_only_mire_source_and_parent_permission_change(self):
         config, unit = deploy.backup_configuration(BACKUP_CONFIG, BACKUP_UNIT)
-        self.assertEqual(config, BACKUP_CONFIG.replace('"/root/mire/mire.db"', '"/var/lib/mire/mire.db"'))
+        self.assertEqual(config, BACKUP_CONFIG.replace('"/root/mire/mire.db"', '"/var/lib/mire/mire.db"')
+                         + '\n[[files]]\npath = "/etc/mire/mire.env"\nlabel = "mire-configuration"\n')
         self.assertEqual(unit, BACKUP_UNIT.replace('"/root/mire"', '"/var/lib/mire"'))
 
     def test_unexpected_source_and_duplicate_parent_fail_closed(self):
@@ -129,6 +130,7 @@ class BackupCoverageTests(unittest.TestCase):
             (BACKUP_CONFIG.replace("/root/mire/mire.db", "/different/data.db"), BACKUP_UNIT),
             (BACKUP_CONFIG, BACKUP_UNIT.replace('"/root/mire"', '"/different"')),
             (BACKUP_CONFIG, BACKUP_UNIT.replace('"/root/mire"', '"/root/mire" "/root/mire"')),
+            (BACKUP_CONFIG + '\n[[files]]\npath="/etc/mire/mire.env"\nlabel="existing"\n', BACKUP_UNIT),
         ):
             with self.subTest(config=config, unit=unit), self.assertRaises(deploy.DeploymentError):
                 deploy.backup_configuration(config, unit)
@@ -262,6 +264,7 @@ class ActivationTests(unittest.TestCase):
         self.assertEqual(deploy.read_digest(self.installer.database), self.original)
         self.assertEqual(deploy.read_digest(self.installer.legacy_database), self.original)
         self.assertIn('path = "/var/lib/mire/mire.db"', self.installer.backup_config.read_text())
+        self.assertIn('path = "/etc/mire/mire.env"', self.installer.backup_config.read_text())
         self.assertIn('"/var/lib/mire"', self.installer.backup_unit.read_text())
         self.assertTrue(self.receipt()["data_relocation_verified"])
 

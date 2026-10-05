@@ -71,6 +71,7 @@ First inspect the running executable, both process identities and local changes.
 The migration stops only the pinned wrapper/app, copies and logically verifies
 the stopped database, and retains the old files. It changes only Mire's source
 path and database-parent permission in the existing managed Backuper configuration,
+and adds the new `/etc/mire/mire.env` configuration file to encrypted coverage,
 under Backuper's job lock. Other sources, destinations, retention, secrets, cron
 jobs, Caddy routes and tmux applications remain untouched. A safe initial failure
 can run the old binary under a temporary `mire-legacy-rollback.service`; inspect
