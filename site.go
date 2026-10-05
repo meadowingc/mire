@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -35,7 +36,11 @@ type Site struct {
 	reaper *reaper.Reaper
 
 	// site database handle
-	db *sqlite.DB
+	db       *sqlite.DB
+	filesDir string
+	workers  sync.WaitGroup
+	statsMu  sync.RWMutex
+	stats    MireSiteStats
 
 	// in-memory cache for /discover
 	discoverCache           []*sqlite.Post
@@ -48,18 +53,31 @@ var templates *template.Template
 
 // New returns a fully populated & ready for action Site
 func New() *Site {
+	return newSite(defaultRuntimeConfig())
+}
+
+func newSite(config runtimeConfig) *Site {
 	title := "mire"
-	db := sqlite.New(title + ".db?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=synchronous(NORMAL)&_pragma=cache_size(-20000)")
+	db := sqlite.New(config.databaseDSN())
 
 	s := Site{
-		title:  title,
-		reaper: reaper.New(db),
-		db:     db,
+		title:    title,
+		reaper:   reaper.NewWithPolling(db, config.background),
+		db:       db,
+		filesDir: config.files,
 	}
 
 	s.loadTemplates()
 
 	return &s
+}
+
+func (s *Site) filesPath(parts ...string) string {
+	directory := s.filesDir
+	if directory == "" {
+		directory = "files"
+	}
+	return filepath.Join(append([]string{directory}, parts...)...)
 }
 
 func (s *Site) loadTemplates() {
@@ -73,12 +91,12 @@ func (s *Site) loadTemplates() {
 		},
 	}
 
-	tmplFiles := filepath.Join("files", "*.tmpl.html")
+	tmplFiles := s.filesPath("*.tmpl.html")
 	templates = template.Must(template.New("whatever").Funcs(funcMap).ParseGlob(tmplFiles))
 }
 
 func (s *Site) staticHandler(w http.ResponseWriter, r *http.Request) {
-	file := filepath.Join("files", "static", r.PathValue("file"))
+	file := s.filesPath("static", r.PathValue("file"))
 	if _, err := os.Stat(file); !errors.Is(err, os.ErrNotExist) {
 		http.ServeFile(w, r, file)
 		return
@@ -95,7 +113,10 @@ func (s *Site) indexHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Site) aboutHandler(w http.ResponseWriter, r *http.Request) {
-	s.renderPage(w, r, "about", globalSiteStats)
+	s.statsMu.RLock()
+	stats := s.stats
+	s.statsMu.RUnlock()
+	s.renderPage(w, r, "about", &stats)
 }
 
 const discoverCacheTTL = 4 * time.Hour
@@ -110,7 +131,9 @@ func (s *Site) discoverHandler(w http.ResponseWriter, r *http.Request) {
 		// stale-while-revalidate: serve the stale cache now and refresh it in
 		// the background so requests never block on the refresh
 		s.discoverRefreshInFlight = true
+		s.workers.Add(1)
 		go func() {
+			defer s.workers.Done()
 			defer func() {
 				s.discoverCacheMu.Lock()
 				s.discoverRefreshInFlight = false
@@ -914,7 +937,7 @@ func (s *Site) renderPage(w http.ResponseWriter, r *http.Request, page string, d
 			},
 		}
 
-		tmplFiles := filepath.Join("files", "*.tmpl.html")
+		tmplFiles := s.filesPath("*.tmpl.html")
 		templates = template.Must(template.New("whatever").Funcs(funcMap).ParseGlob(tmplFiles))
 	}
 
@@ -955,7 +978,7 @@ func (s *Site) renderPageWithTitle(w http.ResponseWriter, r *http.Request, templ
 				return args
 			},
 		}
-		tmplFiles := filepath.Join("files", "*.tmpl.html")
+		tmplFiles := s.filesPath("*.tmpl.html")
 		templates = template.Must(template.New("whatever").Funcs(funcMap).ParseGlob(tmplFiles))
 	}
 
@@ -1148,8 +1171,13 @@ func (s *Site) apiToggleSubscriptionHandler(w http.ResponseWriter, r *http.Reque
 		// Add to reaper if not already there
 		if !s.reaper.HasFeed(feedUrl) {
 			// Try to fetch the feed in the background (Fetch registers it)
+			s.workers.Add(1)
 			go func() {
+				defer s.workers.Done()
 				if _, err := s.reaper.Fetch(feedUrl); err != nil {
+					if errors.Is(err, context.Canceled) {
+						return
+					}
 					log.Printf("Failed to fetch feed %s: %v", feedUrl, err)
 					s.db.SetFeedFetchError(feedUrl, err.Error())
 				}

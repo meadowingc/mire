@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"database/sql"
 	"embed"
 	"fmt"
@@ -270,6 +271,10 @@ func New(path string) *DB {
 
 func (db *DB) Close() error {
 	return db.sql.Close()
+}
+
+func (db *DB) Ping(ctx context.Context) error {
+	return db.sql.PingContext(ctx)
 }
 
 func (db *DB) TryParseDate(dateStr string) (time.Time, error) {

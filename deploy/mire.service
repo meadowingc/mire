@@ -1,0 +1,34 @@
+[Unit]
+Description=Mire feed reader
+Wants=network-online.target
+After=network-online.target
+RequiresMountsFor=/var/lib/mire
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=exec
+User=mire
+Group=mire
+WorkingDirectory=/var/lib/mire
+EnvironmentFile=/etc/mire/mire.env
+ExecStart=/opt/mire/current/mire
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=120
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/mire
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

@@ -23,38 +23,15 @@ func main() {
 		log.Println("main: running in release mode")
 	}
 
-	s := New()
-	router := buildRouter(s)
-
-	go statsCalculatorProcess(s)
-
-	// Setup channel to listen for interrupt signal (ctrl+c)
-	interruptChan := make(chan os.Signal, 1)
-	signal.Notify(interruptChan, os.Interrupt, syscall.SIGTERM)
-
-	server := &http.Server{Addr: ":5544", Handler: router}
-	go func() {
-		log.Println("main: listening on http://localhost:5544")
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("listen: %s\n", err)
-		}
-	}()
-
-	// Block until we receive our interrupt
-	<-interruptChan
-
-	log.Println("main: shutting down server...")
-
-	err := s.db.Close()
+	config, err := loadRuntimeConfig()
 	if err != nil {
-		log.Fatalf("main: database shutdown failed: %+v", err)
+		log.Fatal(err)
 	}
-
-	if err := server.Shutdown(context.TODO()); err != nil {
-		log.Fatalf("main: server shutdown failed: %+v", err)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := runServer(ctx, config); err != nil {
+		log.Fatal(err)
 	}
-
-	log.Println("main: server gracefully stopped")
 }
 
 func buildRouter(s *Site) *chi.Mux {
@@ -69,6 +46,15 @@ func buildRouter(s *Site) *chi.Mux {
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.CleanPath)
 
+	router.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		if err := s.db.Ping(r.Context()); err != nil {
+			log.Printf("health check failed: %v", err)
+			http.Error(w, "database unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("X-Mire-Revision", buildRevision)
+		w.Write([]byte("ok"))
+	})
 	router.Get("/", s.indexHandler)
 	router.Get("/about", s.aboutHandler)
 	router.Get("/u/{username}", s.userHandler)

@@ -1,52 +1,57 @@
 package reaper
 
 import (
-	"os"
+	"context"
+	"path/filepath"
 	"testing"
-	"time"
 
 	"codeberg.org/meadowingc/mire/sqlite"
 )
 
-func createNewTestDB() *sqlite.DB {
-	// remove old db if it exists
-	os.Remove("reaper_go_test.db")
-
-	db := sqlite.New("reaper_go_test.db")
+func createNewTestDB(t *testing.T) *sqlite.DB {
+	t.Helper()
+	db := sqlite.New(filepath.Join(t.TempDir(), "reaper.db"))
+	t.Cleanup(func() { db.Close() })
 	return db
 }
 
 func TestHasFeed(t *testing.T) {
-	db := createNewTestDB()
-	r := New(db)
+	db := createNewTestDB(t)
+	r := NewWithPolling(db, false)
+	defer r.Close(context.Background())
+	first, second := serveTestFeed(t), serveTestFeed(t)
+	defer first.Close()
+	defer second.Close()
+	db.WriteFeed(first.URL)
+	db.WriteFeed(second.URL)
 
-	r.Fetch("https://visakanv.substack.com/feed")
-	r.Fetch("https://meadow.bearblog.dev/feed")
+	r.Fetch(first.URL)
+	r.Fetch(second.URL)
 
 	if r.HasFeed("banana") == true {
 		t.Fatal("reaper should not have a banana")
 	}
-	if r.HasFeed("https://meadow.bearblog.dev/feed") == false {
-		t.Fatal("reaper should have meadow.bearblog.dev")
+	if r.HasFeed(first.URL) == false {
+		t.Fatal("reaper should have the first feed")
 	}
-	if r.HasFeed("https://visakanv.substack.com/feed") == false {
-		t.Fatal("reaper should have visakanv.substack.com")
+	if r.HasFeed(second.URL) == false {
+		t.Fatal("reaper should have the second feed")
 	}
 }
 
 func TestNewPostsGetAddedToDatabase(t *testing.T) {
-	db := createNewTestDB()
-	db.WriteFeed("https://meadow.bearblog.dev/feed/")
-
-	r := New(db)
-
-	time.Sleep(1 * time.Second)
-
-	r.Fetch("https://meadow.bearblog.dev/feed")
-
-	time.Sleep(11 * time.Second) // 11 to account for the saver delay
-
-	if len(db.GetLatestPostsForDiscover(10)) == 0 {
-		t.Fatal("expected 3 posts in db")
+	db := createNewTestDB(t)
+	server := serveTestFeed(t)
+	defer server.Close()
+	db.WriteFeed(server.URL)
+	r := NewWithPolling(db, false)
+	if _, err := r.Fetch(server.URL); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(db.GetPostsForFeed(server.URL)) != 2 {
+		t.Fatal("expected both posts in db")
 	}
 }

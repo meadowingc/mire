@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -29,6 +30,12 @@ func newTestServer(t *testing.T) (*httptest.Server, *sqlite.DB) {
 		db:     db,
 	}
 	s.loadTemplates()
+	t.Cleanup(func() {
+		if err := s.reaper.Close(context.Background()); err != nil {
+			t.Error(err)
+		}
+		s.workers.Wait()
+	})
 
 	var router *chi.Mux = buildRouter(s)
 	server := httptest.NewServer(router)

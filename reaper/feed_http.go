@@ -18,7 +18,7 @@ import (
 var feedHTTPClient = &http.Client{Timeout: 60 * time.Second}
 
 func (r *Reaper) rawFetchFeed(url string) (*gofeed.Feed, time.Time, error) {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(r.requestContext(), http.MethodGet, url, nil)
 	if err != nil {
 		return nil, time.Time{}, err
 	}

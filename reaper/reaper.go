@@ -1,6 +1,7 @@
 package reaper
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"math/rand"
@@ -32,12 +33,25 @@ type Reaper struct {
 
 	saverChannel chan *PostSaveRequest
 
-	db *sqlite.DB
+	db            *sqlite.DB
+	ctx           context.Context
+	cancel        context.CancelFunc
+	schedulerDone chan struct{}
+	saverDone     chan struct{}
+	closed        chan struct{}
+	closeOnce     sync.Once
+	fetchMu       sync.Mutex
+	stopping      bool
+	fetches       sync.WaitGroup
 }
 
 var mutex = make(chan struct{}, 1)
 
 func New(db *sqlite.DB) *Reaper {
+	return NewWithPolling(db, true)
+}
+
+func NewWithPolling(db *sqlite.DB, polling bool) *Reaper {
 	// open up mutex (non-blocking: the token is already there if this is
 	// not the first reaper started in this process)
 	select {
@@ -45,16 +59,53 @@ func New(db *sqlite.DB) *Reaper {
 	default:
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
 	r := &Reaper{
 		feeds:        make(map[string]time.Time),
 		saverChannel: make(chan *PostSaveRequest),
 		db:           db,
+		ctx:          ctx, cancel: cancel,
+		schedulerDone: make(chan struct{}), saverDone: make(chan struct{}), closed: make(chan struct{}),
 	}
 
-	go r.start()
+	go func() {
+		defer close(r.schedulerDone)
+		if polling {
+			r.start()
+		}
+	}()
 	go r.startDbSaver()
 
 	return r
+}
+
+func (r *Reaper) requestContext() context.Context {
+	if r.ctx == nil {
+		return context.Background()
+	}
+	return r.ctx
+}
+
+func (r *Reaper) Close(ctx context.Context) error {
+	r.closeOnce.Do(func() {
+		r.fetchMu.Lock()
+		r.stopping = true
+		r.cancel()
+		r.fetchMu.Unlock()
+		go func() {
+			<-r.schedulerDone
+			r.fetches.Wait()
+			close(r.saverChannel)
+			<-r.saverDone
+			close(r.closed)
+		}()
+	})
+	select {
+	case <-r.closed:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func lock() {
@@ -72,9 +123,18 @@ func (r *Reaper) start() {
 		r.loadFeedDeadlines()
 	}
 
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
 	for {
+		if r.ctx.Err() != nil {
+			return
+		}
 		r.refreshAllFeeds()
-		time.Sleep(10 * time.Minute)
+		select {
+		case <-r.ctx.Done():
+			return
+		case <-ticker.C:
+		}
 	}
 }
 
@@ -95,6 +155,7 @@ func (r *Reaper) loadFeedDeadlines() {
 // whenever the feed changes, the buffer fills up, or the flush interval
 // elapses.
 func (r *Reaper) startDbSaver() {
+	defer close(r.saverDone)
 	const (
 		flushInterval = 5 * time.Second
 		flushSize     = 100
@@ -121,9 +182,14 @@ func (r *Reaper) startDbSaver() {
 	}
 
 	ticker := time.NewTicker(flushInterval)
+	defer ticker.Stop()
 	for {
 		select {
-		case item := <-r.saverChannel:
+		case item, open := <-r.saverChannel:
+			if !open {
+				flush()
+				return
+			}
 			if len(buffer) > 0 && buffer[0].FeedLink != item.FeedLink {
 				flush()
 			}
@@ -206,6 +272,9 @@ func (r *Reaper) updateFeedAndSaveNewItemsToDb(feedLink string) {
 	newF, freshness, err := r.rawFetchFeed(feedLink)
 
 	if err != nil {
+		if r.requestContext().Err() != nil {
+			return
+		}
 		r.handleFeedFetchFailure(feedLink, err)
 		return
 	}
@@ -240,6 +309,7 @@ func (r *Reaper) refreshAllFeeds() {
 	start := time.Now()
 	semaphore := make(chan struct{}, 5)
 	var wg sync.WaitGroup
+	defer wg.Wait()
 
 	lock()
 	due := make([]string, 0)
@@ -259,8 +329,12 @@ func (r *Reaper) refreshAllFeeds() {
 		}
 		r.feeds[feedLink] = time.Now().Add(timeToBecomeStale)
 		unlock()
-		semaphore <- struct{}{} // acquire a token
-		wg.Add(1)               // increment the WaitGroup counter
+		select {
+		case semaphore <- struct{}{}:
+		case <-r.requestContext().Done():
+			return
+		}
+		wg.Add(1) // increment the WaitGroup counter
 
 		go func(feedLink string) {
 			defer func() {
@@ -342,9 +416,20 @@ func (r *Reaper) recordRefresh(url, fetchErr string, fetchedAt, freshness time.T
 // The feed is tracked even when the fetch fails so the scheduler retries
 // after the ordinary three-hour interval.
 func (r *Reaper) Fetch(url string) (*gofeed.Feed, error) {
+	r.fetchMu.Lock()
+	if r.stopping {
+		r.fetchMu.Unlock()
+		return nil, context.Canceled
+	}
+	r.fetches.Add(1)
+	r.fetchMu.Unlock()
+	defer r.fetches.Done()
 	fetchedAt := time.Now()
 	feed, freshness, err := r.rawFetchFeed(url)
 	if err != nil {
+		if r.requestContext().Err() != nil {
+			return nil, err
+		}
 		lock()
 		r.feeds[url] = fetchedAt.Add(timeToBecomeStale)
 		unlock()

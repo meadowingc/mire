@@ -1,6 +1,9 @@
 package main
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 type MireSiteStats struct {
 	LastComputed   time.Time
@@ -9,15 +12,26 @@ type MireSiteStats struct {
 	NumUniqueFeeds int
 }
 
-var globalSiteStats *MireSiteStats = &MireSiteStats{}
-
-func statsCalculatorProcess(s *Site) {
+func statsCalculatorProcess(ctx context.Context, s *Site) {
+	ticker := time.NewTicker(6 * time.Hour)
+	defer ticker.Stop()
 	for {
-		globalSiteStats.LastComputed = time.Now()
-		globalSiteStats.NumReadPosts = s.db.GetGlobalNumReadPosts()
-		globalSiteStats.NumUniqueFeeds = s.db.GetGlobalNumUniqueFeeds()
-		globalSiteStats.TotalUsers = s.db.GetGlobalNumUsers()
-
-		time.Sleep(6 * time.Hour)
+		if ctx.Err() != nil {
+			return
+		}
+		stats := MireSiteStats{
+			LastComputed:   time.Now(),
+			NumReadPosts:   s.db.GetGlobalNumReadPosts(),
+			NumUniqueFeeds: s.db.GetGlobalNumUniqueFeeds(),
+			TotalUsers:     s.db.GetGlobalNumUsers(),
+		}
+		s.statsMu.Lock()
+		s.stats = stats
+		s.statsMu.Unlock()
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
 	}
 }

@@ -1,6 +1,7 @@
 package reaper
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -29,9 +30,10 @@ func TestFetchDoesNotRetainItemsInMemory(t *testing.T) {
 	srv := serveTestFeed(t)
 	defer srv.Close()
 
-	db := createNewTestDB()
+	db := createNewTestDB(t)
 	db.WriteFeed(srv.URL)
 	r := New(db)
+	defer r.Close(context.Background())
 
 	// The caller gets the fully parsed feed for immediate use...
 	feed, err := r.Fetch(srv.URL)
